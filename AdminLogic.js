@@ -7,27 +7,33 @@ document.addEventListener('DOMContentLoaded', function() {
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6am1tcnRoamZtYWl6YmVpaGtxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzcxMTMzMjMsImV4cCI6MjA1MjY4OTMyM30.a39DgG8nvpXDjV4ALWcyCxvCISkgVUUwmwuDDpnKtAM'
     );
 
+    // Get listing ID from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const listingId = urlParams.get('listing_id');
+    console.log('Listing ID from URL:', listingId);
+
     async function initializeAdminCalendar() {
-        // Fetch both open dates and rates
-        const { data: openPeriods, error: openError } = await supabase
-            .from('open_dates')
-            .select('*');
+        // Get listing ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const listingId = urlParams.get('listing_id');
         
-        const { data: rates, error: ratesError } = await supabase
-            .from('rates')
-            .select('*');
-        
-        if (openError) {
-            console.error('Error fetching open dates:', openError);
-            return;
-        }
+        // Fetch settings, open dates and rates for this specific listing
+        const [settingsResponse, openPeriodsResponse, ratesResponse] = await Promise.all([
+            supabase
+                .from('listing_settings')
+                .select('base_rate')
+                .eq('listing_id', listingId),
+            supabase
+                .from('open_dates')
+                .select('*')
+                .eq('listing_id', listingId),
+            supabase
+                .from('rates')
+                .select('*')
+                .eq('listing_id', listingId)
+        ]);
 
-        if (ratesError) {
-            console.error('Error fetching rates:', ratesError);
-            return;
-        }
-
-        // Create flatpickr with initial config including both openPeriods and rates
+        // Create flatpickr with initial config
         const adminPicker = flatpickr("[data-element='admin-date-picker']", {
             mode: "range",
             inline: false,
@@ -36,8 +42,9 @@ document.addEventListener('DOMContentLoaded', function() {
             dateFormat: "Y-m-d",
             minDate: "today",
             maxDate: new Date().setFullYear(new Date().getFullYear() + 1),
-            openPeriods: openPeriods || [],
-            rates: rates || [],
+            baseRate: settingsResponse.data?.[0]?.base_rate || null,
+            openPeriods: openPeriodsResponse.data || [],
+            rates: ratesResponse.data || [],
             showMonths: 1,
             position: "center center",
 
@@ -82,8 +89,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 if (specificRate) {
                     rateElement.textContent = `€${specificRate.rate}`;
+                } else if (fp.config.baseRate) {
+                    rateElement.textContent = `€${fp.config.baseRate}`;
                 } else {
-                    rateElement.textContent = `€${BASE_RATE}`;
+                    rateElement.textContent = '-';
                 }
                 
                 dayElem.appendChild(rateElement);
@@ -96,6 +105,79 @@ document.addEventListener('DOMContentLoaded', function() {
 
         return adminPicker;
     }
+
+    // Fetch both listing details and settings in parallel
+    async function initializeListingPage() {
+        console.log('Initializing listing page...');
+        
+        try {
+            const [listingResponse, settingsResponse] = await Promise.all([
+                supabase
+                    .from('listings')
+                    .select('name')
+                    .eq('id', listingId)
+                    .single(),
+                supabase
+                    .from('listing_settings')
+                    .select('*')
+                    .eq('listing_id', listingId)
+            ]);
+
+            console.log('Listing Response:', listingResponse);
+            console.log('Settings Response:', settingsResponse);
+
+            // Update listing name
+            const listingNameElement = document.querySelector('[data-element="listing-name"]');
+            if (listingResponse.data) {
+                console.log('Setting listing name:', listingResponse.data.name);
+                listingNameElement.textContent = listingResponse.data.name;
+            } else {
+                console.warn('No listing data found');
+            }
+
+            // Handle settings
+            if (settingsResponse.data && settingsResponse.data.length > 0) {
+                console.log('Found existing settings:', settingsResponse.data[0]);
+                // Populate form with existing settings
+                populateSettingsForm(settingsResponse.data[0]);
+            } else {
+                console.log('No settings found for this listing - using empty form');
+                // Form will remain empty, ready for new settings
+            }
+
+        } catch (error) {
+            console.error('Error initializing page:', error);
+        }
+    }
+
+    function populateSettingsForm(settings) {
+        // Map settings to form fields
+        const fieldMappings = {
+            'base-rate-input': settings.base_rate,
+            'max-guests-input': settings.max_guests,
+            'extra-guest-input': settings.extra_guest_fee,
+            'cleaning-fee-input': settings.cleaning_fee,
+            'nightstay-tax-input': settings.nightstay_tax,
+            'min-stay-input': settings.minimum_stay,
+            'booking-gap-input': settings.gap_days,
+            'weekly-discount-input': settings.weekly_discount_percentage,
+            'monthly-discount-input': settings.monthly_discount_percentage
+        };
+
+        // Populate each field
+        Object.entries(fieldMappings).forEach(([elementId, value]) => {
+            const input = document.querySelector(`[data-element="${elementId}"]`);
+            if (input && value !== null) {
+                console.log(`Setting ${elementId} to ${value}`);
+                input.value = value;
+            }
+        });
+    }
+
+    // Call the function
+    initializeListingPage().catch(error => {
+        console.error('Failed to initialize listing page:', error);
+    });
 
     // Rest of your code remains the same...
     initializeAdminCalendar().then(adminPicker => {
@@ -121,54 +203,102 @@ document.addEventListener('DOMContentLoaded', function() {
             const startDate = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`;
             const endDate = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
 
-            // Check for overlapping rate periods
-            const { data: overlappingRates, error: checkError } = await supabase
+            // First, check for any existing periods that overlap with our date range
+            const { data: existingRates, error: checkError } = await supabase
                 .from('rates')
                 .select('*')
-                .filter('start_date', 'lte', endDate)
-                .filter('end_date', 'gte', startDate);
+                .eq('listing_id', listingId)
+                .or(`end_date.gte.${startDate},start_date.lte.${endDate}`);
 
             if (checkError) {
                 console.error('Error checking rates:', checkError);
                 return;
             }
 
-            // If there are overlapping periods, delete them
-            if (overlappingRates && overlappingRates.length > 0) {
-                for (const period of overlappingRates) {
-                    const { error: deleteError } = await supabase
-                        .from('rates')
-                        .delete()
-                        .eq('id', period.id);
+            console.log('Existing rates in range:', existingRates);
 
-                    if (deleteError) {
-                        console.error('Error deleting rate:', deleteError);
-                        return;
-                    }
+            // Group periods by rate
+            const sameRatePeriods = existingRates?.filter(period => period.rate === rate) || [];
+            const differentRatePeriods = existingRates?.filter(period => period.rate !== rate) || [];
+
+            // Handle periods with the same rate first (merge them)
+            if (sameRatePeriods.length > 0) {
+                const allDates = [...sameRatePeriods, { start_date: startDate, end_date: endDate }];
+                const earliestStart = allDates.reduce((earliest, period) => {
+                    return new Date(period.start_date) < new Date(earliest) ? period.start_date : earliest;
+                }, startDate);
+
+                const latestEnd = allDates.reduce((latest, period) => {
+                    return new Date(period.end_date) > new Date(latest) ? period.end_date : latest;
+                }, endDate);
+
+                // Delete the existing same-rate periods
+                for (const period of sameRatePeriods) {
+                    await supabase.from('rates').delete().eq('id', period.id);
+                }
+
+                // Create the merged period
+                await supabase.from('rates').insert({
+                    listing_id: listingId,
+                    start_date: earliestStart,
+                    end_date: latestEnd,
+                    rate: rate,
+                    created_at: new Date().toISOString()
+                });
+            }
+
+            // Handle periods with different rates
+            for (const period of differentRatePeriods) {
+                // Delete the original period
+                await supabase.from('rates').delete().eq('id', period.id);
+
+                // Create before period if needed
+                if (new Date(period.start_date) < new Date(startDate)) {
+                    const beforeEndDate = new Date(startDate);
+                    beforeEndDate.setDate(beforeEndDate.getDate() - 1);
+                    const formattedBeforeEnd = beforeEndDate.toISOString().split('T')[0];
+                    
+                    await supabase.from('rates').insert({
+                        listing_id: listingId,
+                        start_date: period.start_date,
+                        end_date: formattedBeforeEnd,
+                        rate: period.rate,
+                        created_at: new Date().toISOString()
+                    });
+                }
+
+                // Create after period if needed
+                if (new Date(period.end_date) > new Date(endDate)) {
+                    const afterStartDate = new Date(endDate);
+                    afterStartDate.setDate(afterStartDate.getDate() + 1);
+                    const formattedAfterStart = afterStartDate.toISOString().split('T')[0];
+                    
+                    await supabase.from('rates').insert({
+                        listing_id: listingId,
+                        start_date: formattedAfterStart,
+                        end_date: period.end_date,
+                        rate: period.rate,
+                        created_at: new Date().toISOString()
+                    });
                 }
             }
 
-            // Insert the new rate period
-            const { data: newRate, error: insertError } = await supabase
-                .from('rates')
-                .insert({
+            // Insert the new rate period if it wasn't merged with existing ones
+            if (sameRatePeriods.length === 0) {
+                await supabase.from('rates').insert({
+                    listing_id: listingId,
                     start_date: startDate,
                     end_date: endDate,
                     rate: rate,
-                    created_at: new Date().toISOString(),
-                    property_id: propertyId
-                })
-                .select();
-
-            if (insertError) {
-                console.error('Error setting rate:', insertError);
-                return;
+                    created_at: new Date().toISOString()
+                });
             }
 
             // Fetch updated rates
             const { data: updatedRates } = await supabase
                 .from('rates')
-                .select('*');
+                .select('*')
+                .eq('listing_id', listingId);
 
             // Update the calendar config
             adminPicker.config.rates = updatedRates || [];
@@ -192,21 +322,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
             console.log('Opening dates from:', startDate, 'to:', endDate);
 
-            // Adjust the filters to include adjacent dates by adding/subtracting a day
-            const adjacentStartDate = new Date(startDate);
-            adjacentStartDate.setDate(adjacentStartDate.getDate() - 1);
-            const adjacentEndDate = new Date(endDate);
-            adjacentEndDate.setDate(adjacentEndDate.getDate() + 1);
-
-            const formattedAdjacentStart = `${adjacentStartDate.getFullYear()}-${String(adjacentStartDate.getMonth() + 1).padStart(2, '0')}-${String(adjacentStartDate.getDate()).padStart(2, '0')}`;
-            const formattedAdjacentEnd = `${adjacentEndDate.getFullYear()}-${String(adjacentEndDate.getMonth() + 1).padStart(2, '0')}-${String(adjacentEndDate.getDate()).padStart(2, '0')}`;
-
-            // Check for overlapping OR adjacent periods
+            // Check for truly adjacent or overlapping periods
             const { data: nearbyPeriods, error: checkError } = await supabase
                 .from('open_dates')
                 .select('*')
-                .filter('start_date', 'lte', formattedAdjacentEnd)
-                .filter('end_date', 'gte', formattedAdjacentStart);
+                .eq('listing_id', listingId)
+                .or(`end_date.gte.${startDate},start_date.lte.${endDate}`);
 
             if (checkError) {
                 console.error('Error:', checkError);
@@ -216,53 +337,86 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('Nearby periods:', nearbyPeriods);
 
             if (nearbyPeriods && nearbyPeriods.length > 0) {
-                // Find the earliest start date and latest end date among all periods
-                const allDates = [...nearbyPeriods, { start_date: startDate, end_date: endDate }];
-                const earliestStart = allDates.reduce((earliest, period) => {
+                // Check if periods are truly adjacent (1 day gap or less)
+                const shouldMerge = nearbyPeriods.some(period => {
                     const periodStart = new Date(period.start_date);
-                    const currentEarliest = new Date(earliest);
-                    return periodStart < currentEarliest ? period.start_date : earliest;
-                }, startDate);
-
-                const latestEnd = allDates.reduce((latest, period) => {
                     const periodEnd = new Date(period.end_date);
-                    const currentLatest = new Date(latest);
-                    return periodEnd > currentLatest ? period.end_date : latest;
-                }, endDate);
+                    const newStart = new Date(startDate);
+                    const newEnd = new Date(endDate);
 
-                console.log('Merging periods - start:', earliestStart, 'end:', latestEnd);
+                    // Check if periods are adjacent or overlapping
+                    const daysBefore = (newStart - periodEnd) / (1000 * 60 * 60 * 24);
+                    const daysAfter = (periodStart - newEnd) / (1000 * 60 * 60 * 24);
 
-                // Delete all existing periods that will be merged
-                for (const period of nearbyPeriods) {
-                    const { error: deleteError } = await supabase
+                    return daysBefore <= 1 && daysBefore >= -1 || daysAfter <= 1 && daysAfter >= -1;
+                });
+
+                if (shouldMerge) {
+                    // Find the earliest start date and latest end date among adjacent periods
+                    const allDates = [...nearbyPeriods, { start_date: startDate, end_date: endDate }];
+                    const earliestStart = allDates.reduce((earliest, period) => {
+                        const periodStart = new Date(period.start_date);
+                        const currentEarliest = new Date(earliest);
+                        return periodStart < currentEarliest ? period.start_date : earliest;
+                    }, startDate);
+
+                    const latestEnd = allDates.reduce((latest, period) => {
+                        const periodEnd = new Date(period.end_date);
+                        const currentLatest = new Date(latest);
+                        return periodEnd > currentLatest ? period.end_date : latest;
+                    }, endDate);
+
+                    console.log('Merging periods - start:', earliestStart, 'end:', latestEnd);
+
+                    // Delete all existing periods that will be merged
+                    for (const period of nearbyPeriods) {
+                        const { error: deleteError } = await supabase
+                            .from('open_dates')
+                            .delete()
+                            .eq('id', period.id);
+
+                        if (deleteError) {
+                            console.error('Error deleting period:', deleteError);
+                            return;
+                        }
+                    }
+
+                    // Insert the merged period
+                    const { error: insertError } = await supabase
                         .from('open_dates')
-                        .delete()
-                        .eq('id', period.id);
+                        .insert({
+                            listing_id: listingId,
+                            start_date: earliestStart,
+                            end_date: latestEnd
+                        });
 
-                    if (deleteError) {
-                        console.error('Error deleting period:', deleteError);
+                    if (insertError) {
+                        console.error('Error:', insertError);
+                        return;
+                    }
+                } else {
+                    // Create new period if not adjacent
+                    console.log('Creating new period:', startDate, 'to', endDate);
+                    const { error } = await supabase
+                        .from('open_dates')
+                        .insert({
+                            listing_id: listingId,
+                            start_date: startDate,
+                            end_date: endDate
+                        });
+
+                    if (error) {
+                        console.error('Error:', error);
                         return;
                     }
                 }
-
-                // Insert the merged period
-                const { error: insertError } = await supabase
-                    .from('open_dates')
-                    .insert({
-                        start_date: earliestStart,
-                        end_date: latestEnd
-                    });
-
-                if (insertError) {
-                    console.error('Error:', insertError);
-                    return;
-                }
             } else {
+                // No nearby periods, create new one
                 console.log('Creating new period:', startDate, 'to', endDate);
-                // If no nearby periods, insert new period
                 const { error } = await supabase
                     .from('open_dates')
                     .insert({
+                        listing_id: listingId,
                         start_date: startDate,
                         end_date: endDate
                     });
@@ -273,10 +427,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
-            // Update the calendar
+            // Update the calendar with filtered data
             const { data: updatedPeriods } = await supabase
                 .from('open_dates')
-                .select('*');
+                .select('*')
+                .eq('listing_id', listingId);
             
             adminPicker.config.openPeriods = updatedPeriods || [];
             adminPicker.redraw();
@@ -332,6 +487,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const { error: beforeError } = await supabase
                         .from('open_dates')
                         .insert({
+                            listing_id: listingId,
                             start_date: period.start_date,
                             end_date: formattedBeforeEnd
                         });
@@ -352,6 +508,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const { error: afterError } = await supabase
                         .from('open_dates')
                         .insert({
+                            listing_id: listingId,
                             start_date: formattedAfterStart,
                             end_date: period.end_date
                         });
