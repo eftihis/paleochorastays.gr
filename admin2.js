@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Create flatpickr with initial config including both openPeriods and rates
         const adminPicker = flatpickr("[data-element='admin-date-picker']", {
             mode: "range",
-            inline: true,
+            inline: false,
             altInput: true,
             altFormat: "F j, Y",
             dateFormat: "Y-m-d",
@@ -81,9 +81,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 rateElement.className = 'day-rate';
                 
                 if (specificRate) {
-                    rateElement.textContent = `$${specificRate.rate}`;
+                    rateElement.textContent = `€${specificRate.rate}`;
                 } else {
-                    rateElement.textContent = `$${BASE_RATE}`;
+                    rateElement.textContent = `€${BASE_RATE}`;
                 }
                 
                 dayElem.appendChild(rateElement);
@@ -149,14 +149,16 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             // Insert the new rate period
-            const { error: insertError } = await supabase
+            const { data: newRate, error: insertError } = await supabase
                 .from('rates')
                 .insert({
                     start_date: startDate,
                     end_date: endDate,
                     rate: rate,
-                    created_at: new Date().toISOString()
-                });
+                    created_at: new Date().toISOString(),
+                    property_id: propertyId
+                })
+                .select();
 
             if (insertError) {
                 console.error('Error setting rate:', insertError);
@@ -395,13 +397,14 @@ document.addEventListener('DOMContentLoaded', function() {
             --calendar-text-default: #222;
             --calendar-text-hover: #fff;
             --calendar-text-blocked: #222;
-            --calendar-text-past: #222;
+            --calendar-text-past: #ccc;
             --calendar-text-range: #fff;
             
             /* Rate Colors */
             --calendar-rate-default: #222;
             --calendar-rate-hover: #fff;
             --calendar-rate-range: #fff;
+            --calendar-rate-past: #ccc;
             
             /* Border Colors */
             --calendar-border-default: #ddd;
@@ -413,11 +416,11 @@ document.addEventListener('DOMContentLoaded', function() {
             --calendar-opacity-blocked: 1;
             
             /* Spacing */
-            --calendar-cell-padding: 2rem;
-            --calendar-rate-margin: 1rem;
+            --calendar-cell-padding: 1em;
+            --calendar-rate-margin: 1.5em;
             
             /* Font Sizes */
-            --calendar-date-size: 2rem;
+            --calendar-date-size: 1.25em;
             --calendar-rate-size: 0.875rem;
             
             /* Font Weights */
@@ -457,10 +460,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         .flatpickr-day.past-date {
-            cursor: not-allowed !important;
-            pointer-events: none;
             color: var(--calendar-text-past) !important;
-            opacity: var(--calendar-opacity-past) !important;
+            background-color: var(--calendar-bg-past) !important;
         }
             
         .flatpickr-day.inRange {
@@ -530,6 +531,56 @@ document.addEventListener('DOMContentLoaded', function() {
 
         .flatpickr-day.blocked-date .day-rate {
             text-decoration: none !important;
+        }
+
+        /* Override cursor for calendar inputs */
+        .w-input[readonly],
+        input[data-element='admin-date-picker'].w-input[readonly] {
+            cursor: pointer !important;
+        }
+
+        /* Add hover styles for today's date */
+        .flatpickr-day.today:hover,
+        .flatpickr-day.today.inRange,
+        .flatpickr-day.today.startRange,
+        .flatpickr-day.today.endRange {
+            background-color: var(--calendar-bg-hover) !important;
+            color: var(--calendar-text-hover) !important;
+            border-color: var(--calendar-border-hover) !important;
+        }
+
+        .flatpickr-day.today:hover .day-rate,
+        .flatpickr-day.today.inRange .day-rate,
+        .flatpickr-day.today.startRange .day-rate,
+        .flatpickr-day.today.endRange .day-rate {
+            color: var(--calendar-rate-hover) !important;
+        }
+
+        /* Calendar container sizing */
+        .flatpickr-calendar {
+            width: min(100%, 500px) !important;
+            min-width: 280px !important;
+        }
+
+        .flatpickr-rContainer {
+            width: 100% !important;
+        }
+
+        .flatpickr-days {
+            width: 100% !important;
+        }
+
+        .dayContainer {
+            display: grid !important;
+            grid-template-columns: repeat(7, 1fr) !important;
+            width: 100% !important;
+            min-width: 100% !important;
+            max-width: 100% !important;
+            gap: 0 !important;
+        }
+
+        .flatpickr-day.past-date .day-rate {
+            color: var(--calendar-rate-past) !important;
         }
     `;
 
