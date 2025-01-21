@@ -42,11 +42,11 @@ document.addEventListener('DOMContentLoaded', async function() {
         const urlParams = new URLSearchParams(window.location.search);
         const listingId = urlParams.get('listing_id');
         
-        // Fetch settings, open dates and rates for this specific listing
-        const [settingsResponse, openPeriodsResponse, ratesResponse] = await Promise.all([
+        // Fetch settings, open dates, rates and bookings in parallel
+        const [settingsResponse, openPeriodsResponse, ratesResponse, bookingsResponse] = await Promise.all([
             supabase
                 .from('listing_settings')
-                .select('base_rate')
+                .select('base_rate, gap_days')
                 .eq('listing_id', listingId),
             supabase
                 .from('open_dates')
@@ -55,55 +55,62 @@ document.addEventListener('DOMContentLoaded', async function() {
             supabase
                 .from('rates')
                 .select('*')
+                .eq('listing_id', listingId),
+            supabase
+                .from('bookings')
+                .select(`
+                    *,
+                    guests (
+                        name,
+                        email,
+                        phone
+                    )
+                `)
                 .eq('listing_id', listingId)
         ]);
 
-        // Fetch bookings first with more detailed error logging
-        console.log('Fetching bookings with query:', {
-            table: 'bookings',
-            select: `*, guests!bookings_guest_id_fkey(*)`
-        });
-
-        // First, let's check if we can get the guest data directly
-        const { data: guestData, error: guestError } = await supabase
-            .from('guests')
-            .select('*')
-            .eq('id', 'GST_a1842276-5484-456c-9747-fa395edbfb52');
-
-        console.log('Guest data test:', guestData, 'Error:', guestError);
-
-        // Now try the bookings with the correct join structure
-        const { data: bookings, error: bookingsError } = await supabase
-            .from('bookings')
-            .select(`
-                *,
-                guests (
-                    name,
-                    email,
-                    phone
-                )
-            `)
-            .eq('listing_id', listingId);
-
-        if (bookingsError) {
-            console.error('Error fetching bookings:', bookingsError);
-            return;
-        }
-
-        // Add more detailed logging for debugging
-        console.log('Raw bookings response:', bookings);
-        console.log('Number of bookings fetched:', bookings?.length || 0);
-
-        bookings?.forEach((booking, index) => {
-            console.log(`Booking ${index + 1} details:`, {
-                id: booking.id,
-                check_in: booking.check_in,
-                check_out: booking.check_out,
-                guest_id: booking.guest_id,
-                guest_data: booking.guests,
-                full_booking: booking
+        // Process bookings to create disabled dates based on gap days
+        const gapDays = settingsResponse.data?.[0]?.gap_days || 0;
+        const disabledDateRanges = [];
+        
+        if (bookingsResponse.data) {
+            bookingsResponse.data.forEach(booking => {
+                const checkIn = new Date(booking.check_in);
+                const checkOut = new Date(booking.check_out);
+                
+                // Calculate gap dates before check-in
+                const gapStart = new Date(checkIn);
+                gapStart.setDate(gapStart.getDate() - gapDays);
+                const gapEndBefore = new Date(checkIn);
+                gapEndBefore.setDate(gapEndBefore.getDate() - 1);
+                
+                // Calculate gap dates after check-out
+                const gapStartAfter = new Date(checkOut);
+                const gapEnd = new Date(checkOut);
+                gapEnd.setDate(gapEnd.getDate() + gapDays - 1); // Adjust end date to include gap days after checkout
+                
+                // Add ranges to disabled dates
+                if (gapDays > 0) {
+                    // Add pre-booking gap
+                    disabledDateRanges.push({
+                        from: gapStart.toISOString().split('T')[0],
+                        to: gapEndBefore.toISOString().split('T')[0]
+                    });
+                    
+                    // Add post-booking gap
+                    disabledDateRanges.push({
+                        from: checkOut.toISOString().split('T')[0],  // Start from checkout date
+                        to: gapEnd.toISOString().split('T')[0]
+                    });
+                }
+                
+                // Add the actual booking dates
+                disabledDateRanges.push({
+                    from: booking.check_in,
+                    to: booking.check_out
+                });
             });
-        });
+        }
 
         // Create flatpickr with initial config
         const adminPicker = flatpickr("[data-element='admin-date-picker']", {
@@ -112,15 +119,15 @@ document.addEventListener('DOMContentLoaded', async function() {
             altInput: true,
             altFormat: "F j, Y",
             dateFormat: "Y-m-d",
-            minDate: "today",
+            minDate: new Date().setFullYear(new Date().getFullYear() - 1),
             maxDate: new Date().setFullYear(new Date().getFullYear() + 1),
             baseRate: settingsResponse.data?.[0]?.base_rate || null,
             openPeriods: openPeriodsResponse.data || [],
             rates: ratesResponse.data || [],
             showMonths: 1,
             position: "center center",
-            bookings: bookings || [],
-
+            bookings: bookingsResponse.data || [],
+            disable: disabledDateRanges,
             
             onChange: function(selectedDates) {
                 if (selectedDates.length === 2) {
@@ -706,12 +713,19 @@ document.addEventListener('DOMContentLoaded', async function() {
     const styles = `
         /* Calendar Theme Variables */
         :root {
+           
+        
             /* Colors */
             --calendar-bg-default: #fff;
             --calendar-bg-hover: #222;
             --calendar-bg-blocked: #EBEBEB;
             --calendar-bg-range: #222;
             --calendar-bg-range-end: #222;
+
+             /* Border Colors */
+            --calendar-border-default: #ddd;
+            --calendar-border-hover: #ddd;
+            --calendar-border-range: #ddd;
             
             /* Text Colors */
             --calendar-text-default: #222;
@@ -726,10 +740,6 @@ document.addEventListener('DOMContentLoaded', async function() {
             --calendar-rate-range: #fff;
             --calendar-rate-past: #ccc;
             
-            /* Border Colors */
-            --calendar-border-default: #ddd;
-            --calendar-border-hover: #ddd;
-            --calendar-border-range: #ddd;
             
             /* Opacity */
             --calendar-opacity-past: 0.4;
@@ -768,6 +778,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             color: var(--calendar-text-default);
         }
 
+
         .flatpickr-day:hover {
             background-color: var(--calendar-bg-hover);
             border-radius: var(--calendar-cell-radius);
@@ -782,8 +793,11 @@ document.addEventListener('DOMContentLoaded', async function() {
         .flatpickr-day.past-date {
             color: var(--calendar-text-past) !important;
             background-color: var(--calendar-bg-past) !important;
+            cursor: not-allowed !important;
+            pointer-events: none !important;
         }
             
+
         .flatpickr-day.inRange {
             background-color: var(--calendar-bg-range) !important;
             color: var(--calendar-text-range) !important;
@@ -795,6 +809,12 @@ document.addEventListener('DOMContentLoaded', async function() {
         .flatpickr-day.startRange .day-rate,
         .flatpickr-day.endRange .day-rate {
             color: var(--calendar-rate-range);
+        }
+
+        .flatpickr-day.flatpickr-disabled,
+        .flatpickr-day.flatpickr-disabled:hover {
+         cursor: not-allowed !important;
+         pointer-events: none !important;
         }
 
         .flatpickr-day.blocked-date {
@@ -930,7 +950,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         .booking-strip.booking-end {
             border-top-right-radius: 100px;
             border-bottom-right-radius: 100px;
-            right: -20%;
+            right: -10%;
         }
 
         .guest-name {
@@ -950,10 +970,14 @@ document.addEventListener('DOMContentLoaded', async function() {
         /* Ensure the date number stays above the booking strip */
         .flatpickr-day .day-number {
             position: relative;
-            z-index: 3;
+            z-index: 2;
         }
 
-    
+        /* Override hover styles for disabled blocked dates */
+        .flatpickr-day.flatpickr-disabled.blocked-date:hover {
+            background-color: var(--calendar-bg-blocked) !important;
+            color: var(--calendar-text-blocked) !important;
+
     `;
 
     document.head.insertAdjacentHTML('beforeend', `<style>${styles}</style>`);

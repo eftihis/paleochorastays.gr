@@ -608,16 +608,7 @@ span.flatpickr-weekday {
       border-color: #DDD
 }
 
-.flatpickr-day.today {
-      border-color: #DDD
-}
 
-.flatpickr-day.today:hover,
-.flatpickr-day.today:focus {
-      border-color: #DDD;
-      background: #959ea9;
-      color: #fff
-}
 
 .flatpickr-day.selected,
 .flatpickr-day.startRange,
