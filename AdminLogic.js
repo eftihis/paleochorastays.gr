@@ -1,13 +1,41 @@
-document.addEventListener('DOMContentLoaded', function() {
-    const BASE_RATE = 100;
+// Utility function to get listing ID from URL
+function getListingIdFromUrl() {
+    const pathSegments = window.location.pathname.split('/');
+    
+    // If we're on the admin-dashboard page, get the listing ID from query params
+    if (pathSegments.includes('admin-dashboard')) {
+        const urlParams = new URLSearchParams(window.location.search);
+        const listingId = urlParams.get('listing');
+        console.log('Listing ID from query params:', listingId);
+        return listingId || 'LST_ef95ad0f45b6'; // Fallback to your listing ID
+    }
+    
+    // Otherwise get it from the path
+    const listingId = pathSegments[pathSegments.length - 1];
+    console.log('Listing ID from URL:', listingId);
+    return listingId;
+}
+
+document.addEventListener('DOMContentLoaded', async function() {
+    console.log('Admin logic initialized');
+    
+    // Get the listing ID
+    const listingId = getListingIdFromUrl();
+    console.log('Using listing ID:', listingId);
+
+    // Only proceed if we have a valid listing ID
+    if (!listingId) {
+        console.error('No listing ID found');
+        return;
+    }
 
     // Remove Supabase initialization, use global instance
     const supabase = window.supabase;
 
     // Get listing ID from URL
     const urlParams = new URLSearchParams(window.location.search);
-    const listingId = urlParams.get('listing_id');
-    console.log('Listing ID from URL:', listingId);
+    const listingIdFromUrl = urlParams.get('listing_id');
+    console.log('Listing ID from URL:', listingIdFromUrl);
 
     async function initializeAdminCalendar() {
         // Get listing ID from URL
@@ -877,4 +905,37 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Call this function after DOM loads
     setupIntegerInputs();
+
+    // Fetch bookings
+    const { data: bookings, error } = await supabase
+        .from('bookings')
+        .select(`
+            *,
+            guests!bookings_guest_id_fkey (
+                name,
+                email
+            )
+        `)
+        .eq('listing_id', listingId);
+
+    if (error) {
+        console.error('Error fetching bookings:', error);
+        return;
+    }
+
+    console.log('Fetched bookings:', bookings);
+    console.log('Number of bookings:', bookings?.length || 0);
+
+    // Let's log more details about the booking
+    if (bookings && bookings.length > 0) {
+        bookings.forEach((booking, index) => {
+            console.log(`Booking ${index + 1}:`, {
+                checkIn: booking.check_in,
+                checkOut: booking.check_out,
+                guestName: booking.guests?.name,
+                guestEmail: booking.guests?.email,
+                status: booking.status
+            });
+        });
+    }
 });
