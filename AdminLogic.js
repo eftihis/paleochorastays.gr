@@ -1,11 +1,8 @@
 document.addEventListener('DOMContentLoaded', function() {
     const BASE_RATE = 100;
 
-    // Initialize Supabase
-    const supabase = window.supabase.createClient(
-        'https://uzjmmrthjfmaizbeihkq.supabase.co',
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6am1tcnRoamZtYWl6YmVpaGtxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzcxMTMzMjMsImV4cCI6MjA1MjY4OTMyM30.a39DgG8nvpXDjV4ALWcyCxvCISkgVUUwmwuDDpnKtAM'
-    );
+    // Remove Supabase initialization, use global instance
+    const supabase = window.supabase;
 
     // Get listing ID from URL
     const urlParams = new URLSearchParams(window.location.search);
@@ -151,7 +148,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function populateSettingsForm(settings) {
-        // Map settings to form fields
         const fieldMappings = {
             'base-rate-input': settings.base_rate,
             'max-guests-input': settings.max_guests,
@@ -160,11 +156,10 @@ document.addEventListener('DOMContentLoaded', function() {
             'nightstay-tax-input': settings.nightstay_tax,
             'min-stay-input': settings.minimum_stay,
             'booking-gap-input': settings.gap_days,
-            'weekly-discount-input': settings.weekly_discount_percentage,
-            'monthly-discount-input': settings.monthly_discount_percentage
+            'weekly-discount-input': settings.weekly_discount_percentage * 100,
+            'monthly-discount-input': settings.monthly_discount_percentage * 100
         };
 
-        // Populate each field
         Object.entries(fieldMappings).forEach(([elementId, value]) => {
             const input = document.querySelector(`[data-element="${elementId}"]`);
             if (input && value !== null) {
@@ -537,6 +532,65 @@ document.addEventListener('DOMContentLoaded', function() {
             // Redraw the calendar
             adminPicker.redraw();
         });
+
+        // Add this near your other event listeners
+        document.querySelector("[data-element='save-listing-settings']").addEventListener('click', async () => {
+            console.log('Save settings clicked');
+            
+            // Get all form values with proper parsing
+            const settings = {
+                listing_id: listingId,
+                base_rate: Math.floor(parseFloat(document.querySelector('[data-element="base-rate-input"]').value)),
+                max_guests: Math.floor(parseFloat(document.querySelector('[data-element="max-guests-input"]').value)),
+                extra_guest_fee: Math.floor(parseFloat(document.querySelector('[data-element="extra-guest-input"]').value)),
+                cleaning_fee: Math.floor(parseFloat(document.querySelector('[data-element="cleaning-fee-input"]').value)),
+                nightstay_tax: parseFloat(document.querySelector('[data-element="nightstay-tax-input"]').value),
+                minimum_stay: Math.floor(parseFloat(document.querySelector('[data-element="min-stay-input"]').value)),
+                gap_days: Math.floor(parseFloat(document.querySelector('[data-element="booking-gap-input"]').value)),
+                weekly_discount_percentage: parseFloat(document.querySelector('[data-element="weekly-discount-input"]').value) / 100,
+                monthly_discount_percentage: parseFloat(document.querySelector('[data-element="monthly-discount-input"]').value) / 100,
+                updated_at: new Date().toISOString()
+            };
+
+            console.log('Settings to save:', settings);
+
+            try {
+                // First check if settings exist for this listing
+                const { data: existingSettings } = await supabase
+                    .from('listing_settings')
+                    .select('*')
+                    .eq('listing_id', listingId);
+
+                let response;
+                if (existingSettings && existingSettings.length > 0) {
+                    // Update existing settings
+                    response = await supabase
+                        .from('listing_settings')
+                        .update(settings)
+                        .eq('listing_id', listingId);
+                } else {
+                    // Insert new settings
+                    response = await supabase
+                        .from('listing_settings')
+                        .insert([{
+                            ...settings,
+                            created_at: new Date().toISOString()
+                        }]);
+                }
+
+                if (response.error) {
+                    console.error('Error saving settings:', response.error);
+                    alert('Failed to save settings. Please try again.');
+                } else {
+                    console.log('Settings saved successfully:', response);
+                    alert('Settings saved successfully!');
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred while saving settings.');
+            }
+        });
     });
 
     // Styles remain the same...
@@ -742,4 +796,85 @@ document.addEventListener('DOMContentLoaded', function() {
     `;
 
     document.head.insertAdjacentHTML('beforeend', `<style>${styles}</style>`);
+
+    // Add this after your DOM content loaded event
+    function setupIntegerInputs() {
+        // Fields that should only accept integers
+        const integerFields = [
+            'base-rate-input',
+            'max-guests-input',
+            'extra-guest-input',
+            'cleaning-fee-input',
+            'min-stay-input',
+            'booking-gap-input'
+        ];
+
+        integerFields.forEach(fieldId => {
+            const input = document.querySelector(`[data-element="${fieldId}"]`);
+            if (input) {
+                // Prevent decimal input
+                input.addEventListener('input', (e) => {
+                    e.target.value = e.target.value.replace(/[^0-9]/g, '');
+                });
+
+                // Ensure integer on blur
+                input.addEventListener('blur', (e) => {
+                    const value = e.target.value;
+                    if (value) {
+                        e.target.value = Math.floor(parseFloat(value));
+                    }
+                });
+            }
+        });
+
+        // Fields that can have decimals (percentage and tax)
+        const decimalFields = [
+            'nightstay-tax-input',
+            'weekly-discount-input',
+            'monthly-discount-input'
+        ];
+
+        decimalFields.forEach(fieldId => {
+            const input = document.querySelector(`[data-element="${fieldId}"]`);
+            if (input) {
+                // Allow decimals but clean input
+                input.addEventListener('input', (e) => {
+                    e.target.value = e.target.value.replace(/[^0-9.]/g, '');
+                    // Ensure only one decimal point
+                    const parts = e.target.value.split('.');
+                    if (parts.length > 2) {
+                        e.target.value = parts[0] + '.' + parts.slice(1).join('');
+                    }
+                });
+            }
+        });
+
+        // Special handling for percentage fields
+        const percentageFields = [
+            'weekly-discount-input',
+            'monthly-discount-input'
+        ];
+
+        percentageFields.forEach(fieldId => {
+            const input = document.querySelector(`[data-element="${fieldId}"]`);
+            if (input) {
+                // Convert decimal to percentage when displaying
+                if (input.value) {
+                    input.value = (parseFloat(input.value) * 100).toString();
+                }
+
+                // Allow only whole numbers for percentages
+                input.addEventListener('input', (e) => {
+                    e.target.value = e.target.value.replace(/[^0-9]/g, '');
+                    // Ensure value doesn't exceed 100
+                    if (parseInt(e.target.value) > 100) {
+                        e.target.value = '100';
+                    }
+                });
+            }
+        });
+    }
+
+    // Call this function after DOM loads
+    setupIntegerInputs();
 });
