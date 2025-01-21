@@ -58,6 +58,25 @@ document.addEventListener('DOMContentLoaded', async function() {
                 .eq('listing_id', listingId)
         ]);
 
+        // Fetch bookings first
+        const { data: bookings, error } = await supabase
+            .from('bookings')
+            .select(`
+                *,
+                guests!bookings_guest_id_fkey (
+                    name,
+                    email
+                )
+            `)
+            .eq('listing_id', listingId);
+
+        if (error) {
+            console.error('Error fetching bookings:', error);
+            return;
+        }
+
+        console.log('Fetched bookings:', bookings);
+
         // Create flatpickr with initial config
         const adminPicker = flatpickr("[data-element='admin-date-picker']", {
             mode: "range",
@@ -72,6 +91,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             rates: ratesResponse.data || [],
             showMonths: 1,
             position: "center center",
+            bookings: bookings || [],
 
             
             onChange: function(selectedDates) {
@@ -124,6 +144,36 @@ document.addEventListener('DOMContentLoaded', async function() {
                 
                 if (!openPeriod) {
                     dayElem.classList.add('blocked-date');
+                }
+
+                // Add booking indicator if date is booked
+                const booking = fp.config.bookings?.find(booking => 
+                    formattedCurrentDate >= booking.check_in && 
+                    formattedCurrentDate <= booking.check_out
+                );
+
+                if (booking) {
+                    const bookingStrip = document.createElement('div');
+                    bookingStrip.className = 'booking-strip';
+                    
+                    // Add classes for start and end dates
+                    if (formattedCurrentDate === booking.check_in) {
+                        bookingStrip.classList.add('booking-start');
+                    }
+                    if (formattedCurrentDate === booking.check_out) {
+                        bookingStrip.classList.add('booking-end');
+                    }
+
+                    // Add guest name if available
+                    if (booking.guests?.name) {
+                        const guestName = document.createElement('span');
+                        guestName.className = 'guest-name';
+                        guestName.textContent = booking.guests.name;
+                        bookingStrip.appendChild(guestName);
+                    }
+
+                    dayElem.appendChild(bookingStrip);
+                    dayElem.classList.add('has-booking');
                 }
             }
         });
@@ -821,6 +871,57 @@ document.addEventListener('DOMContentLoaded', async function() {
         .flatpickr-day.past-date .day-rate {
             color: var(--calendar-rate-past) !important;
         }
+
+        /* Booking styles */
+        .flatpickr-day.has-booking {
+            overflow: visible;
+            position: relative;
+        }
+
+        .booking-strip {
+            position: absolute;
+            left: -1px;
+            right: -1px;
+            bottom: 10px;
+            top: auto;
+            height: 32px;
+            background: var(--calendar-bg-hover);
+            z-index: 2;
+        }
+
+        .booking-strip.booking-start {
+            border-top-left-radius: 100px;
+            border-bottom-left-radius: 100px;
+            left: 10%;
+        }
+
+        .booking-strip.booking-end {
+            border-top-right-radius: 100px;
+            border-bottom-right-radius: 100px;
+            right: -120%;
+        }
+
+        .guest-name {
+            position: absolute;
+            color: white;
+            font-size: 12px;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+            padding: 0 8px;
+        }
+
+        /* Ensure the date number stays above the booking strip */
+        .flatpickr-day .day-number {
+            position: relative;
+            z-index: 3;
+        }
+
+    
     `;
 
     document.head.insertAdjacentHTML('beforeend', `<style>${styles}</style>`);
@@ -905,37 +1006,4 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Call this function after DOM loads
     setupIntegerInputs();
-
-    // Fetch bookings
-    const { data: bookings, error } = await supabase
-        .from('bookings')
-        .select(`
-            *,
-            guests!bookings_guest_id_fkey (
-                name,
-                email
-            )
-        `)
-        .eq('listing_id', listingId);
-
-    if (error) {
-        console.error('Error fetching bookings:', error);
-        return;
-    }
-
-    console.log('Fetched bookings:', bookings);
-    console.log('Number of bookings:', bookings?.length || 0);
-
-    // Let's log more details about the booking
-    if (bookings && bookings.length > 0) {
-        bookings.forEach((booking, index) => {
-            console.log(`Booking ${index + 1}:`, {
-                checkIn: booking.check_in,
-                checkOut: booking.check_out,
-                guestName: booking.guests?.name,
-                guestEmail: booking.guests?.email,
-                status: booking.status
-            });
-        });
-    }
 });
