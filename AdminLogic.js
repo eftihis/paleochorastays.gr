@@ -58,24 +58,52 @@ document.addEventListener('DOMContentLoaded', async function() {
                 .eq('listing_id', listingId)
         ]);
 
-        // Fetch bookings first
-        const { data: bookings, error } = await supabase
+        // Fetch bookings first with more detailed error logging
+        console.log('Fetching bookings with query:', {
+            table: 'bookings',
+            select: `*, guests!bookings_guest_id_fkey(*)`
+        });
+
+        // First, let's check if we can get the guest data directly
+        const { data: guestData, error: guestError } = await supabase
+            .from('guests')
+            .select('*')
+            .eq('id', 'GST_a1842276-5484-456c-9747-fa395edbfb52');
+
+        console.log('Guest data test:', guestData, 'Error:', guestError);
+
+        // Now try the bookings with the correct join structure
+        const { data: bookings, error: bookingsError } = await supabase
             .from('bookings')
             .select(`
                 *,
-                guests!bookings_guest_id_fkey (
+                guests (
                     name,
-                    email
+                    email,
+                    phone
                 )
             `)
             .eq('listing_id', listingId);
 
-        if (error) {
-            console.error('Error fetching bookings:', error);
+        if (bookingsError) {
+            console.error('Error fetching bookings:', bookingsError);
             return;
         }
 
-        console.log('Fetched bookings:', bookings);
+        // Add more detailed logging for debugging
+        console.log('Raw bookings response:', bookings);
+        console.log('Number of bookings fetched:', bookings?.length || 0);
+
+        bookings?.forEach((booking, index) => {
+            console.log(`Booking ${index + 1} details:`, {
+                id: booking.id,
+                check_in: booking.check_in,
+                check_out: booking.check_out,
+                guest_id: booking.guest_id,
+                guest_data: booking.guests,
+                full_booking: booking
+            });
+        });
 
         // Create flatpickr with initial config
         const adminPicker = flatpickr("[data-element='admin-date-picker']", {
@@ -153,23 +181,26 @@ document.addEventListener('DOMContentLoaded', async function() {
                 );
 
                 if (booking) {
+                    console.log('Found booking for date:', formattedCurrentDate, booking);
+                    console.log('Guest data for booking:', booking.guests);
+
                     const bookingStrip = document.createElement('div');
                     bookingStrip.className = 'booking-strip';
                     
                     // Add classes for start and end dates
                     if (formattedCurrentDate === booking.check_in) {
                         bookingStrip.classList.add('booking-start');
+                        // Only add guest name on the first day of booking
+                        if (booking.guests?.name) {
+                            console.log('Adding guest name to calendar:', booking.guests.name);
+                            const guestName = document.createElement('span');
+                            guestName.className = 'guest-name';
+                            guestName.textContent = booking.guests.name;
+                            bookingStrip.appendChild(guestName);
+                        }
                     }
                     if (formattedCurrentDate === booking.check_out) {
                         bookingStrip.classList.add('booking-end');
-                    }
-
-                    // Add guest name if available
-                    if (booking.guests?.name) {
-                        const guestName = document.createElement('span');
-                        guestName.className = 'guest-name';
-                        guestName.textContent = booking.guests.name;
-                        bookingStrip.appendChild(guestName);
                     }
 
                     dayElem.appendChild(bookingStrip);
@@ -690,7 +721,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             --calendar-text-range: #fff;
             
             /* Rate Colors */
-            --calendar-rate-default: #222;
+            --calendar-rate-default: #474747;
             --calendar-rate-hover: #fff;
             --calendar-rate-range: #fff;
             --calendar-rate-past: #ccc;
@@ -876,6 +907,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         .flatpickr-day.has-booking {
             overflow: visible;
             position: relative;
+            pointer-events: none;
         }
 
         .booking-strip {
@@ -898,7 +930,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         .booking-strip.booking-end {
             border-top-right-radius: 100px;
             border-bottom-right-radius: 100px;
-            right: -120%;
+            right: -20%;
         }
 
         .guest-name {
@@ -909,8 +941,8 @@ document.addEventListener('DOMContentLoaded', async function() {
             top: 50%;
             transform: translate(-50%, -50%);
             white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            overflow: visible;
+            text-overflow: visible;
             max-width: 100%;
             padding: 0 8px;
         }
