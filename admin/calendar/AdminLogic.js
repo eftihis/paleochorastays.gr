@@ -5,9 +5,9 @@ function getListingIdFromUrl() {
     // If we're on the admin-dashboard page, get the listing ID from query params
     if (pathSegments.includes('admin-dashboard')) {
         const urlParams = new URLSearchParams(window.location.search);
-        const listingId = urlParams.get('listing');
+        const listingId = urlParams.get('listing_id');
         console.log('Listing ID from query params:', listingId);
-        return listingId || 'LST_ef95ad0f45b6'; // Fallback to your listing ID
+        return listingId;
     }
     
     // Otherwise get it from the path
@@ -464,6 +464,9 @@ document.addEventListener('DOMContentLoaded', async function() {
             // Clear the rate input and hide the rate settings
             rateInput.value = '';
             document.querySelector('.ratesettings_wrap').classList.remove('is-open');
+
+            // Clear the selection after processing
+            adminPicker.clear();
         });
 
         // Open dates handler
@@ -590,6 +593,9 @@ document.addEventListener('DOMContentLoaded', async function() {
             
             adminPicker.config.openPeriods = updatedPeriods || [];
             adminPicker.redraw();
+
+            // Clear the selection after processing
+            adminPicker.clear();
         });
 
         // Close dates handler
@@ -691,6 +697,9 @@ document.addEventListener('DOMContentLoaded', async function() {
             adminPicker.config.openPeriods = updatedPeriods || [];
             // Redraw the calendar
             adminPicker.redraw();
+
+            // Clear the selection after processing
+            adminPicker.clear();
         });
 
         // Reset rates button handler
@@ -763,6 +772,9 @@ document.addEventListener('DOMContentLoaded', async function() {
             
             // Redraw the calendar
             adminPicker.redraw();
+
+            // Clear the selection after processing
+            adminPicker.clear();
         });
 
         // Add this near your other event listeners
