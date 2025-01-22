@@ -132,7 +132,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Create flatpickr with initial config
         const adminPicker = flatpickr("[data-element='admin-date-picker']", {
             mode: "range",
-            inline: false,
+            inline: true,
             altInput: true,
             altFormat: "F j, Y",
             dateFormat: "Y-m-d",

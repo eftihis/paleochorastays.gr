@@ -99,7 +99,9 @@
 }
 
 .flatpickr-day.flatpickr-disabled,
-.flatpickr-day.flatpickr-disabled:hover {
+.flatpickr-day.flatpickr-disabled:hover,
+.flatpickr-day.flatpickr-disabled.has-booking,
+.flatpickr-day.flatpickr-disabled.has-booking:hover {
     cursor: not-allowed !important;
     pointer-events: none !important;
 }
@@ -214,7 +216,6 @@ input[data-element='admin-date-picker'].w-input[readonly] {
 .flatpickr-day.has-booking {
     overflow: visible;
     position: relative;
-    pointer-events: none;
 }
 
 .booking-strip {
@@ -232,6 +233,7 @@ input[data-element='admin-date-picker'].w-input[readonly] {
     border-top-left-radius: 100px;
     border-bottom-left-radius: 100px;
     left: 20%;
+    z-index: 3;
 }
 
 .booking-strip.booking-end {
@@ -249,7 +251,6 @@ input[data-element='admin-date-picker'].w-input[readonly] {
     transform: translate(-50%, -50%);
     white-space: nowrap;
     overflow: visible;
-    text-overflow: visible;
     max-width: 100%;
     padding: 0 8px;
 }
@@ -260,11 +261,7 @@ input[data-element='admin-date-picker'].w-input[readonly] {
     z-index: 2;
 }
 
-/* Override hover styles for disabled blocked dates */
-.flatpickr-day.flatpickr-disabled.blocked-date:hover {
-    background-color: var(--calendar-bg-blocked) !important;
-    color: var(--calendar-text-blocked) !important;
-}
+
 
 .flatpickr-day.has-booking {
     pointer-events: auto !important;
@@ -273,4 +270,9 @@ input[data-element='admin-date-picker'].w-input[readonly] {
 .booking-strip {
     pointer-events: auto !important;
     cursor: pointer !important;
+}
+
+.flatpickr-disabled {
+    pointer-events: none !important;
+    cursor: not-allowed !important;
 }
