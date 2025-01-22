@@ -265,3 +265,12 @@ input[data-element='admin-date-picker'].w-input[readonly] {
     background-color: var(--calendar-bg-blocked) !important;
     color: var(--calendar-text-blocked) !important;
 }
+
+.flatpickr-day.has-booking {
+    pointer-events: auto !important;
+}
+
+.booking-strip {
+    pointer-events: auto !important;
+    cursor: pointer !important;
+}
