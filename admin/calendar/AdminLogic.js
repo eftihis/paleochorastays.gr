@@ -133,6 +133,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         const adminPicker = flatpickr("[data-element='admin-date-picker']", {
             mode: "range",
             inline: true,
+            static: false,
             altInput: true,
             altFormat: "F j, Y",
             dateFormat: "Y-m-d",
@@ -145,6 +146,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             position: "center center",
             bookings: bookingsResponse.data || [],
             disable: disabledDateRanges,
+
             
             onChange: function(selectedDates) {
                 if (selectedDates.length === 2) {

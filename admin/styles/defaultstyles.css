@@ -527,7 +527,7 @@ span.flatpickr-weekday {
       -webkit-align-items: flex-start;
       -ms-flex-align: start;
       align-items: flex-start;
-      width: 307.875px
+      width: 307.875px;
 }
 
 .flatpickr-days:focus {
