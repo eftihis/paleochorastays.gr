@@ -3,7 +3,7 @@ function getListingIdFromUrl() {
     const pathSegments = window.location.pathname.split('/');
     
     // If we're on the admin-dashboard page, get the listing ID from query params
-    if (pathSegments.includes('admin-dashboard')) {
+    if (pathSegments.includes('admin-dashboard-copy')) {
         const urlParams = new URLSearchParams(window.location.search);
         const listingId = urlParams.get('listing_id');
         console.log('Listing ID from query params:', listingId);
@@ -159,7 +159,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 
                 // Add past-date class for dates before today
                 if (currentDate < new Date().setHours(0,0,0,0)) {
-                    dayElem.classList.add('past-date');
+                    dayElem.classList.add('flatpickr-disabled');
                 }
                 
                 // Format current date for comparison
@@ -465,8 +465,15 @@ document.addEventListener('DOMContentLoaded', async function() {
             rateInput.value = '';
             document.querySelector('.ratesettings_wrap').classList.remove('is-open');
 
-            // Clear the selection after processing
+            // Store current month before clearing
+            const currentMonth = adminPicker.currentMonth;
+            const currentYear = adminPicker.currentYear;
+            
+            // Clear the selection
             adminPicker.clear();
+            
+            // Jump back to the stored month
+            adminPicker.jumpToDate(new Date(currentYear, currentMonth));
         });
 
         // Open dates handler
@@ -594,8 +601,15 @@ document.addEventListener('DOMContentLoaded', async function() {
             adminPicker.config.openPeriods = updatedPeriods || [];
             adminPicker.redraw();
 
-            // Clear the selection after processing
+            // Store current month before clearing
+            const currentMonth = adminPicker.currentMonth;
+            const currentYear = adminPicker.currentYear;
+            
+            // Clear the selection
             adminPicker.clear();
+            
+            // Jump back to the stored month
+            adminPicker.jumpToDate(new Date(currentYear, currentMonth));
         });
 
         // Close dates handler
@@ -698,8 +712,15 @@ document.addEventListener('DOMContentLoaded', async function() {
             // Redraw the calendar
             adminPicker.redraw();
 
-            // Clear the selection after processing
+            // Store current month before clearing
+            const currentMonth = adminPicker.currentMonth;
+            const currentYear = adminPicker.currentYear;
+            
+            // Clear the selection
             adminPicker.clear();
+            
+            // Jump back to the stored month
+            adminPicker.jumpToDate(new Date(currentYear, currentMonth));
         });
 
         // Reset rates button handler
@@ -773,8 +794,15 @@ document.addEventListener('DOMContentLoaded', async function() {
             // Redraw the calendar
             adminPicker.redraw();
 
-            // Clear the selection after processing
+            // Store current month before clearing
+            const currentMonth = adminPicker.currentMonth;
+            const currentYear = adminPicker.currentYear;
+            
+            // Clear the selection
             adminPicker.clear();
+            
+            // Jump back to the stored month
+            adminPicker.jumpToDate(new Date(currentYear, currentMonth));
         });
 
         // Add this near your other event listeners
