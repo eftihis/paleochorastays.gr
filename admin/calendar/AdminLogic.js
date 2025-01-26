@@ -316,8 +316,8 @@ document.addEventListener('DOMContentLoaded', async function() {
             'max-guests-input': settings.max_guests,
             'extra-guest-input': settings.extra_guest_fee,
             'cleaning-fee-input': settings.cleaning_fee,
-            'nightstay-tax-input': settings.nightstay_tax,
             'min-stay-input': settings.minimum_stay,
+            'max-stay-input': settings.maximum_stay,
             'booking-gap-input': settings.gap_days,
             'weekly-discount-input': settings.weekly_discount_percentage * 100,
             'monthly-discount-input': settings.monthly_discount_percentage * 100
@@ -819,8 +819,8 @@ document.addEventListener('DOMContentLoaded', async function() {
                 max_guests: Math.floor(parseFloat(document.querySelector('[data-element="max-guests-input"]').value)),
                 extra_guest_fee: Math.floor(parseFloat(document.querySelector('[data-element="extra-guest-input"]').value)),
                 cleaning_fee: Math.floor(parseFloat(document.querySelector('[data-element="cleaning-fee-input"]').value)),
-                nightstay_tax: parseFloat(document.querySelector('[data-element="nightstay-tax-input"]').value),
                 minimum_stay: Math.floor(parseFloat(document.querySelector('[data-element="min-stay-input"]').value)),
+                maximum_stay: Math.floor(parseFloat(document.querySelector('[data-element="max-stay-input"]').value)),
                 gap_days: Math.floor(parseFloat(document.querySelector('[data-element="booking-gap-input"]').value)),
                 weekly_discount_percentage: parseFloat(document.querySelector('[data-element="weekly-discount-input"]').value) / 100,
                 monthly_discount_percentage: parseFloat(document.querySelector('[data-element="monthly-discount-input"]').value) / 100,
@@ -882,7 +882,6 @@ document.addEventListener('DOMContentLoaded', async function() {
 
            // Fields that can have decimals (percentage and tax)
            const decimalFields = [
-            'nightstay-tax-input',
             'weekly-discount-input',
             'monthly-discount-input'
         ];
@@ -998,177 +997,28 @@ document.addEventListener('DOMContentLoaded', async function() {
                     'check-out': formatDate(bookings.check_out),
                     'total-nights': `${nights} nights`,
                     'total-price': `€${formatPrice(totalPrice)}`,
-                    'confirmation-code': bookings.id || 'N/A',
-                    'nightly-rate': `€${formatPrice(bookings.nightly_rate)}`,
-                    'cleaning-fee': `€${formatPrice(cleaningFee)}`,
+                    'nightly-total': `€${formatPrice(nightlyTotal)}`,
                     'discount-amount': `€${formatPrice(discountAmount)}`,
-                    'nightstay-tax-amount': `€${formatPrice(nightstayTaxAmount)}`,
-                    'total-guests': bookings.number_of_guests || 'N/A',
-                    'booking-status': bookings.status || 'N/A',
-                    'payment-status': bookings.payment_status || 'N/A'
+                    'cleaning-fee': `€${formatPrice(cleaningFee)}`,
+                    'nightstay-tax': `€${formatPrice(nightstayTaxAmount)}`
                 };
 
-                // Update all elements in the modal
                 Object.entries(modalElements).forEach(([element, value]) => {
                     const el = document.querySelector(`[data-element="booking-${element}"]`);
                     if (el) el.textContent = value;
                 });
 
                 // Show the modal
-                document.querySelector('[data-element="booking-modal"]').classList.add('is-visible');
+                document.querySelector('.bookingmodal_wrap').classList.add('is-open');
             }
         });
 
-        // Handle modal closing
-        document.addEventListener('click', (e) => {
-            if (e.target.matches('[data-element="close-modal"]') || 
-                e.target.matches('[data-element="modal-background"]')) {
-                document.querySelector('[data-element="booking-modal"]').classList.remove('is-visible');
-            }
+        // Close modal handler
+        document.querySelector('[data-element="close-booking-modal"]').addEventListener('click', () => {
+            document.querySelector('.bookingmodal_wrap').classList.remove('is-open');
         });
     }
 
-    // Initialize the booking modal functionality
+    // Call setup function
     setupBookingModal();
-
-    // Modify handleBookingClick to ensure it's being called
-    async function handleBookingClick(dateObj) {
-        console.log('handleBookingClick called with date:', dateObj);
-        
-        // Ensure we're using the correct date by setting time to noon to avoid timezone issues
-        const adjustedDate = new Date(dateObj);
-        adjustedDate.setHours(12, 0, 0, 0);
-        
-        // Format date for query
-        const formattedDate = adjustedDate.toISOString().split('T')[0];
-        
-        console.log('Using adjusted date for query:', formattedDate);
-        
-        // Find the booking that contains this date
-        console.log('Fetching booking for listing:', listingId, 'and date:', formattedDate);
-        const { data: bookings, error } = await supabase
-            .from('bookings')
-            .select(`
-                *,
-                guests (*),
-                listings (name)
-            `)
-            .eq('listing_id', listingId)
-            .lte('check_in', formattedDate)
-            .gte('check_out', formattedDate)
-            .single();
-
-        if (error) {
-            console.error('Error fetching booking:', error);
-            return;
-        }
-
-        if (!bookings) {
-            console.error('No booking found for this date');
-            return;
-        }
-
-        console.log('Found booking:', bookings);
-
-        try {
-            // Use stored booking values from the database
-            const nights = bookings.total_nights || 0;
-            const nightlyTotal = bookings.subtotal_nights || 0;
-            const discountAmount = bookings.discount_total || 0;
-            const cleaningFee = bookings.cleaning_fee || 0;
-            const nightstayTaxAmount = bookings.nightstay_tax_total || 0;
-            const totalPrice = bookings.final_total || 0;
-
-            // Debug modal element
-            const modal = document.querySelector('[data-element="booking-modal"]');
-            console.log('Modal element:', modal);
-            
-            if (!modal) {
-                console.error('Modal element not found! Please check if the HTML contains an element with data-element="booking-modal"');
-                return;
-            }
-
-            // Populate modal elements
-            const modalElements = {
-                'guest-name': bookings.guests.name,
-                'listing-name': bookings.listings.name,
-                'check-in': formatDate(bookings.check_in),
-                'check-out': formatDate(bookings.check_out),
-                'total-nights': `${nights} nights`,
-                'total-price': `€${formatPrice(totalPrice)}`,
-                'confirmation-code': bookings.id || 'N/A',
-                'nightly-rate': `€${formatPrice(bookings.nightly_rate)}`,
-                'cleaning-fee': `€${formatPrice(cleaningFee)}`,
-                'discount-amount': `€${formatPrice(discountAmount)}`,
-                'nightstay-tax-amount': `€${formatPrice(nightstayTaxAmount)}`,
-                'total-guests': bookings.number_of_guests || 'N/A',
-                'booking-status': bookings.status || 'N/A',
-                'payment-status': bookings.payment_status || 'N/A'
-            };
-
-            // Debug each modal element
-            Object.entries(modalElements).forEach(([element, value]) => {
-                const el = document.querySelector(`[data-element="booking-${element}"]`);
-                if (el) {
-                    console.log(`Found element booking-${element}, setting value:`, value);
-                    el.textContent = value;
-                } else {
-                    console.error(`Element booking-${element} not found in DOM`);
-                }
-            });
-
-            // Show the modal
-            console.log('Attempting to show modal...');
-            modal.style.display = 'block'; // Add explicit display
-            modal.classList.add('is-visible');
-            console.log('Modal classes after adding is-visible:', modal.classList.toString());
-            console.log('Modal display style:', modal.style.display);
-            console.log('Modal visibility:', window.getComputedStyle(modal).visibility);
-            console.log('Modal opacity:', window.getComputedStyle(modal).opacity);
-
-        } catch (err) {
-            console.error('Error processing booking:', err);
-        }
-    }
-
-    // Add modal close handlers
-    const modal = document.querySelector('[data-element="booking-modal"]');
-    const closeButton = document.querySelector('[data-element="close-modal"]');
-    
-    if (modal) {
-        // Close on background click
-        modal.addEventListener('click', function(e) {
-            console.log('Modal clicked:', e.target);
-            console.log('Modal element:', modal);
-            console.log('Is click target modal?', e.target === modal);
-            console.log('Target classes:', e.target.classList);
-            
-            // Check if the click was on the modal background
-            // We'll check both the modal itself and any element with modal_background class
-            if (e.target === modal || e.target.classList.contains('modal_background')) {
-                console.log('Closing modal on background click');
-                modal.style.display = 'none';
-                modal.classList.remove('is-visible');
-            }
-        });
-    }
-
-    if (closeButton) {
-        // Close on close button click
-        closeButton.addEventListener('click', function(e) {
-            console.log('Closing modal on button click');
-            e.preventDefault();
-            modal.style.display = 'none';
-            modal.classList.remove('is-visible');
-        });
-    }
-
-    // Add escape key handler
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && modal.classList.contains('is-visible')) {
-            console.log('Closing modal on escape key');
-            modal.style.display = 'none';
-            modal.classList.remove('is-visible');
-        }
-    });
 });
