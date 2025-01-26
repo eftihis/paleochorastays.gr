@@ -147,6 +147,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             bookings: bookingsResponse.data || [],
             disable: disabledDateRanges,
 
+
             
             onChange: function(selectedDates) {
                 if (selectedDates.length === 2) {
