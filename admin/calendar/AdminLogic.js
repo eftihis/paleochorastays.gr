@@ -3,7 +3,7 @@ function getListingIdFromUrl() {
     const pathSegments = window.location.pathname.split('/');
     
     // If we're on the admin-dashboard page, get the listing ID from query params
-    if (pathSegments.includes('admin-dashboard-copy')) {
+    if (pathSegments.includes('admin-dashboard-copy-2')) {
         const urlParams = new URLSearchParams(window.location.search);
         const listingId = urlParams.get('listing_id');
         console.log('Listing ID from query params:', listingId);
