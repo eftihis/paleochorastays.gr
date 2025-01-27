@@ -159,7 +159,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 
                 // Add past-date class for dates before today
                 if (currentDate < new Date().setHours(0,0,0,0)) {
-                    dayElem.classList.add('past-date');
+                    dayElem.classList.add('flatpickr-disabled');
                 }
                 
                 // Format current date for comparison
@@ -710,6 +710,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         // Reset rates button handler
         document.querySelector("[data-element='reset-rates']").addEventListener('click', async () => {
+            const currentMonth = adminPicker.currentMonth; // Store current month before operations
             const [start, end] = adminPicker.selectedDates;
             if (!start || !end) return;
 
@@ -776,11 +777,10 @@ document.addEventListener('DOMContentLoaded', async function() {
             // Update the calendar config
             adminPicker.config.rates = updatedRates || [];
             
-            // Redraw the calendar
-            adminPicker.redraw();
-
-            // Clear the selection after processing
+            // Clear first, then redraw and change to stored month
             adminPicker.clear();
+            adminPicker.redraw();
+            adminPicker.changeMonth(currentMonth, false);
         });
 
         // Add this near your other event listeners
