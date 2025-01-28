@@ -842,6 +842,31 @@ document.addEventListener('DOMContentLoaded', async function() {
                 alert('An error occurred while saving settings.');
             }
         });
+
+        // Add ESC key handler for calendar
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                // Clear calendar selection if dates are selected
+                if (adminPicker.selectedDates.length > 0) {
+                    console.log('Clearing calendar selection on ESC');
+                    const currentMonth = adminPicker.currentMonth; // Store current month before operations
+                    adminPicker.clear();
+                    adminPicker.redraw();
+                    adminPicker.changeMonth(currentMonth, false); // Restore the month view
+                    // Hide any open UI elements
+                    document.querySelector("[data-element='open-dates']").style.display = 'none';
+                    document.querySelector("[data-element='close-dates']").style.display = 'none';
+                    document.querySelector('.setrates_wrap').classList.remove('is-open');
+                }
+                // Keep existing modal close behavior
+                const modal = document.querySelector('[data-element="booking-modal"]');
+                if (modal?.classList.contains('is-visible')) {
+                    console.log('Closing modal on escape key');
+                    modal.style.display = 'none';
+                    modal.classList.remove('is-visible');
+                }
+            }
+        });
     });
 
     // Add this after your DOM content loaded event
