@@ -46,6 +46,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         return;
     }
 
+
     // Remove Supabase initialization, use global instance
     const supabase = window.supabase;
 
