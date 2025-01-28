@@ -143,6 +143,8 @@ document.addEventListener('DOMContentLoaded', async function() {
             openPeriods: openPeriodsResponse.data || [],
             rates: ratesResponse.data || [],
             showMonths: 1,
+            showOutsideDays: false,
+            animate: true,
             position: "center center",
             bookings: bookingsResponse.data || [],
             disable: disabledDateRanges,
