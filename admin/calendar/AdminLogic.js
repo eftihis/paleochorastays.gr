@@ -185,9 +185,9 @@ document.addEventListener('DOMContentLoaded', async function() {
                 rateElement.className = 'day-rate';
                 
                 if (specificRate) {
-                    rateElement.textContent = `€${specificRate.rate}`;
+                    rateElement.textContent = `€ ${specificRate.rate}`;
                 } else if (fp.config.baseRate) {
-                    rateElement.textContent = `€${fp.config.baseRate}`;
+                    rateElement.textContent = `€ ${fp.config.baseRate}`;
                 } else {
                     rateElement.textContent = '-';
                 }

@@ -102,7 +102,6 @@
 .flatpickr-day.flatpickr-disabled:hover,
 .flatpickr-day.flatpickr-disabled.has-booking,
 .flatpickr-day.flatpickr-disabled.has-booking:hover {
-    cursor: not-allowed !important;
     pointer-events: none !important;
 }
 

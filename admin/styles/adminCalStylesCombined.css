@@ -22,9 +22,8 @@
         
     
         /* ftlatpickr-disabled */
-        --flatpickr-disabled-text-color: color-mix(in srgb, var(--flatpickr-day-text-color), transparent 50%);
         --flatpickr-disabled-bg: #efeeee;
-        
+
         /* .prevMonthDay .nextMonthDay */
         --flatpickr-prevMonthDay-text-color: color-mix(in srgb, var(--flatpickr-day-text-color), transparent 50%);
         --flatpickr-nextMonthDay-text-color: color-mix(in srgb, var(--flatpickr-day-text-color), transparent 50%);
@@ -641,9 +640,10 @@ span.flatpickr-weekday {
     -webkit-box-sizing: border-box;
     box-sizing: border-box;
     cursor: pointer;
-    font-weight: 600;
+    font-weight: 500;
     display: flex;
     flex-direction: column;
+    gap: 1.5rem;
     justify-content: center;
     align-items: center;
     -webkit-box-pack: center;
@@ -663,16 +663,16 @@ span.flatpickr-weekday {
 .flatpickr-day:hover {
     background-color: var(--flatpickr-day-bg-hover);
     border-radius: var(--flatpickr-border-radius);
-}
-
-.flatpickr-day:hover .day-rate {
     color: var(--flatpickr-day-text-color-hover);
 }
 
+.day-rate {
+font-size: 1.125rem;
+color: inherit;
+font-weight: 400;
+}
 
-.flatpickr-day:focus,
-.flatpickr-day:focus-visible,
-.flatpickr-day:focus-within {
+.flatpickr-day:focus-visible {
     background-color: var(--flatpickr-blocked-date-bg-hover);
     border-radius: var(--flatpickr-border-radius);
     z-index: 1000;
@@ -683,14 +683,10 @@ span.flatpickr-weekday {
 .flatpickr-disabled,
 .flatpickr-disabled:hover,
 .flatpickr-disabled.blocked-date,
-.flatpickr-disabled.blocked-date:hover, {
+.flatpickr-disabled.blocked-date:hover {
     background-color: var(--flatpickr-disabled-bg);
     cursor: not-allowed;
     border-radius: 0;
-}
-
-button.flatpickr-day.flatpickr-disabled {
-    cursor: not-allowed !important;
 }
 
 
@@ -750,36 +746,23 @@ button.flatpickr-day.flatpickr-disabled {
 }
 
 .blocked-date {
-    background-color: var(--flatpickr-blocked-date-bg);
-    
+    background-color: var(--flatpickr-blocked-date-bg); 
 }
+
 .blocked-date:hover {
     background-color: var(--flatpickr-blocked-date-bg-hover);
     border-color: var(--flatpickr-blocked-date-border-color-hover);
 }
 
-.blocked-date .day-number {
-    position: relative;
-    text-decoration: none;
-}
-
-.blocked-date .day-number::after,
-.flatpickr-disabled .day-number::after {
+.blocked-date:not(.flatpickr-disabled) .day-number::after {
     content: '';
     position: absolute;
     top: 50%;
     left: -20%;
-    width: 140%;
+    width: 150%;
     border-bottom: var(--flatpickr-border-width) solid;
     border-color: inherit;
 }
-
-
-.day-rate {
-    font-weight: 400;
-    color: color-mix(in srgb, var(--flatpickr-day-text-color), transparent 20%);
-}
-
 
 .flatpickr-day.has-booking {
     overflow: visible;
@@ -830,7 +813,6 @@ button.flatpickr-day.flatpickr-disabled {
 .flatpickr-day .day-number {
     position: relative;
     z-index: 2;
-    margin-bottom: 1rem;
 }
 
 
@@ -842,10 +824,6 @@ button.flatpickr-day.flatpickr-disabled {
 
 .flatpickr-day.hidden {
     visibility: hidden
-}
-
-.rangeMode .flatpickr-day {
-    margin-top: 1px
 }
 
 .flatpickr-weekwrapper {
