@@ -33,6 +33,81 @@ function formatDate(dateString) {
     return new Date(dateString).toLocaleDateString(undefined, options);
 }
 
+// Helper functions
+function createDateRanges(selectedDates) {
+    if (selectedDates.length === 0) return [];
+    
+    // If only one date is selected, treat it as a single-day range
+    if (selectedDates.length === 1) {
+        const date = new Date(selectedDates[0]);
+        // Ensure we're working with local dates at noon to avoid timezone issues
+        date.setHours(12, 0, 0, 0);
+        return [{
+            start: date,
+            end: date
+        }];
+    }
+    
+    // Sort dates chronologically
+    const sortedDates = [...selectedDates].sort((a, b) => a - b).map(date => {
+        const d = new Date(date);
+        d.setHours(12, 0, 0, 0);
+        return d;
+    });
+    
+    const ranges = [];
+    let rangeStart = sortedDates[0];
+    
+    for (let i = 1; i < sortedDates.length; i++) {
+        const currentDate = sortedDates[i];
+        const previousDate = sortedDates[i - 1];
+        
+        // Check if dates are consecutive
+        const dayDiff = Math.round((currentDate - previousDate) / (1000 * 60 * 60 * 24));
+        
+        if (dayDiff > 1) {
+            // End of a range
+            ranges.push({
+                start: rangeStart,
+                end: previousDate
+            });
+            // Start new range
+            rangeStart = currentDate;
+        }
+    }
+    
+    // Add the last range
+    ranges.push({
+        start: rangeStart,
+        end: sortedDates[sortedDates.length - 1]
+    });
+    
+    return ranges;
+}
+
+// Helper function to format dates consistently
+function formatDate(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+// Helper function to check if two periods overlap or are adjacent
+function periodsOverlap(period1Start, period1End, period2Start, period2End) {
+    const start1 = new Date(period1Start);
+    const end1 = new Date(period1End);
+    const start2 = new Date(period2Start);
+    const end2 = new Date(period2End);
+    
+    start1.setHours(12, 0, 0, 0);
+    end1.setHours(12, 0, 0, 0);
+    start2.setHours(12, 0, 0, 0);
+    end2.setHours(12, 0, 0, 0);
+    
+    // Check if periods overlap or are adjacent (within 1 day)
+    return (start1 <= end2 && end1 >= start2) || 
+           (Math.abs(end1.getTime() - start2.getTime()) <= 86400000) ||
+           (Math.abs(end2.getTime() - start1.getTime()) <= 86400000);
+}
+
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('Admin logic initialized');
     
@@ -493,8 +568,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Apply rate button handler
         document.querySelector("[data-element='apply-rate']").addEventListener('click', async () => {
             const currentMonth = adminPicker.currentMonth;
-            const [start, end] = adminPicker.selectedDates;
-            if (!start || !end) return;
+            const selectedDates = adminPicker.selectedDates;
+            if (selectedDates.length === 0) return;
 
             // Get and validate the rate
             const rateInput = document.querySelector("[data-element='rate-input']");
@@ -504,324 +579,143 @@ document.addEventListener('DOMContentLoaded', async function() {
                 return;
             }
 
-            // Format dates using local timezone
-            const startDate = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`;
-            const endDate = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
-
-            // First, check for any existing periods that overlap with our date range
-            const { data: existingRates, error: checkError } = await supabase
-                .from('rates')
-                .select('*')
-                .eq('listing_id', listingId)
-                .or(`end_date.gte.${startDate},start_date.lte.${endDate}`);
-
-            if (checkError) {
-                console.error('Error checking rates:', checkError);
-                return;
-            }
-
-            console.log('Existing rates in range:', existingRates);
-
-            // Group periods by rate
-            const sameRatePeriods = existingRates?.filter(period => period.rate === rate) || [];
-            const differentRatePeriods = existingRates?.filter(period => period.rate !== rate) || [];
-
-            // Handle periods with the same rate first (merge them)
-            if (sameRatePeriods.length > 0) {
-                const allDates = [...sameRatePeriods, { start_date: startDate, end_date: endDate }];
-                const earliestStart = allDates.reduce((earliest, period) => {
-                    return new Date(period.start_date) < new Date(earliest) ? period.start_date : earliest;
-                }, startDate);
-
-                const latestEnd = allDates.reduce((latest, period) => {
-                    return new Date(period.end_date) > new Date(latest) ? period.end_date : latest;
-                }, endDate);
-
-                // Delete the existing same-rate periods
-                for (const period of sameRatePeriods) {
-                    await supabase.from('rates').delete().eq('id', period.id);
-                }
-
-                // Create the merged period
-                await supabase.from('rates').insert({
-                    listing_id: listingId,
-                    start_date: earliestStart,
-                    end_date: latestEnd,
-                    rate: rate,
-                    created_at: new Date().toISOString()
-                });
-            }
-
-            // Handle periods with different rates
-            for (const period of differentRatePeriods) {
-                // Delete the original period
-                await supabase.from('rates').delete().eq('id', period.id);
-
-                // Create before period if needed
-                if (new Date(period.start_date) < new Date(startDate)) {
-                    const beforeEndDate = new Date(startDate);
-                    beforeEndDate.setDate(beforeEndDate.getDate() - 1);
-                    const formattedBeforeEnd = beforeEndDate.toISOString().split('T')[0];
-                    
-                    await supabase.from('rates').insert({
-                        listing_id: listingId,
-                        start_date: period.start_date,
-                        end_date: formattedBeforeEnd,
-                        rate: period.rate,
-                        created_at: new Date().toISOString()
-                    });
-                }
-
-                // Create after period if needed
-                if (new Date(period.end_date) > new Date(endDate)) {
-                    const afterStartDate = new Date(endDate);
-                    afterStartDate.setDate(afterStartDate.getDate() + 1);
-                    const formattedAfterStart = afterStartDate.toISOString().split('T')[0];
-                    
-                    await supabase.from('rates').insert({
-                        listing_id: listingId,
-                        start_date: formattedAfterStart,
-                        end_date: period.end_date,
-                        rate: period.rate,
-                        created_at: new Date().toISOString()
-                    });
-                }
-            }
-
-            // Insert the new rate period if it wasn't merged with existing ones
-            if (sameRatePeriods.length === 0) {
-                await supabase.from('rates').insert({
-                    listing_id: listingId,
-                    start_date: startDate,
-                    end_date: endDate,
-                    rate: rate,
-                    created_at: new Date().toISOString()
-                });
-            }
-
-            // Fetch updated rates
-            const { data: updatedRates } = await supabase
-                .from('rates')
-                .select('*')
-                .eq('listing_id', listingId);
-
-            // Update the calendar config
-            adminPicker.config.rates = updatedRates || [];
-            
-            // Clear first, then redraw and change to stored month
-            adminPicker.clear();
-            adminPicker.redraw();
-            adminPicker.changeMonth(currentMonth, false);
-
-            // Clear the rate input and hide the rate settings
-            rateInput.value = '';
-            document.querySelector('.ratesettings_wrap').classList.remove('is-open');
-        });
-
-        // Modify the createDateRanges function to handle single dates
-        function createDateRanges(selectedDates) {
-            if (selectedDates.length === 0) return [];
-            
-            // If only one date is selected, treat it as a single-day range
-            if (selectedDates.length === 1) {
-                return [{
-                    start: selectedDates[0],
-                    end: selectedDates[0]
-                }];
-            }
-            
-            // Sort dates chronologically
-            const sortedDates = [...selectedDates].sort((a, b) => a - b);
-            const ranges = [];
-            let rangeStart = sortedDates[0];
-            
-            for (let i = 1; i < sortedDates.length; i++) {
-                const currentDate = sortedDates[i];
-                const previousDate = sortedDates[i - 1];
-                
-                // Check if dates are consecutive
-                const dayDiff = (currentDate - previousDate) / (1000 * 60 * 60 * 24);
-                
-                if (dayDiff > 1) {
-                    // End of a range
-                    ranges.push({
-                        start: rangeStart,
-                        end: previousDate
-                    });
-                    // Start new range
-                    rangeStart = currentDate;
-                }
-            }
-            
-            // Add the last range
-            ranges.push({
-                start: rangeStart,
-                end: sortedDates[sortedDates.length - 1]
-            });
-            
-            return ranges;
-        }
-
-        // Modify the click handler to accept single dates
-        document.querySelector("[data-element='open-dates']").addEventListener('click', async () => {
-            const currentMonth = adminPicker.currentMonth;
-            const selectedDates = adminPicker.selectedDates;
-            if (selectedDates.length === 0) return;  // Changed from < 2 to === 0
-
             const dateRanges = createDateRanges(selectedDates);
-            console.log('Processing date ranges:', dateRanges);
-
-            try {
-                for (const range of dateRanges) {
-                    const startDate = `${range.start.getFullYear()}-${String(range.start.getMonth() + 1).padStart(2, '0')}-${String(range.start.getDate()).padStart(2, '0')}`;
-                    const endDate = `${range.end.getFullYear()}-${String(range.end.getMonth() + 1).padStart(2, '0')}-${String(range.end.getDate()).padStart(2, '0')}`;
-
-                    console.log('Opening dates from:', startDate, 'to:', endDate);
-                    
-                    // Check for truly overlapping or adjacent periods
-                    const { data: nearbyPeriods, error: checkError } = await supabase
-                        .from('open_dates')
-                        .select('*')
-                        .eq('listing_id', listingId)
-                        .or(`end_date.gte.${startDate},start_date.lte.${endDate}`);
-
-                    if (checkError) {
-                        console.error('Error checking nearby periods:', checkError);
-                        continue;
-                    }
-
-                    console.log('Found nearby periods:', nearbyPeriods);
-
-                    // Filter for actually overlapping or adjacent periods
-                    const overlappingPeriods = nearbyPeriods?.filter(period => {
-                        const periodStart = new Date(period.start_date);
-                        const periodEnd = new Date(period.end_date);
-                        const rangeStart = new Date(startDate);
-                        const rangeEnd = new Date(endDate);
-
-                        // Check if periods are adjacent or overlapping
-                        const isAdjacent = 
-                            // Period ends day before range starts
-                            (periodEnd.getTime() + 86400000 >= rangeStart.getTime() &&
-                             periodEnd.getTime() < rangeStart.getTime()) ||
-                            // Period starts day after range ends
-                            (periodStart.getTime() - 86400000 <= rangeEnd.getTime() &&
-                             periodStart.getTime() > rangeEnd.getTime());
-
-                        const isOverlapping = 
-                            (periodStart <= rangeEnd && periodEnd >= rangeStart);
-
-                        return isAdjacent || isOverlapping;
-                    }) || [];
-
-                    console.log('Actually overlapping periods:', overlappingPeriods);
-
-                    if (overlappingPeriods.length > 0) {
-                        console.log('Merging with overlapping periods');
-                        // Merge overlapping periods
-                        const allDates = [...overlappingPeriods, { start_date: startDate, end_date: endDate }];
-                        const earliestStart = allDates.reduce((earliest, period) => {
-                            return period.start_date < earliest ? period.start_date : earliest;
-                        }, startDate);
-
-                        const latestEnd = allDates.reduce((latest, period) => {
-                            return period.end_date > latest ? period.end_date : latest;
-                        }, endDate);
-
-                        // Delete existing periods
-                        for (const period of overlappingPeriods) {
-                            const { error: deleteError } = await supabase
-                                .from('open_dates')
-                                .delete()
-                                .eq('id', period.id);
-                            
-                            if (deleteError) {
-                                console.error('Error deleting period:', deleteError);
-                            }
-                        }
-
-                        // Create merged period
-                        const { error: insertError } = await supabase
-                            .from('open_dates')
-                            .insert({
-                                listing_id: listingId,
-                                start_date: earliestStart,
-                                end_date: latestEnd,
-                                created_at: new Date().toISOString()
-                            });
-
-                        if (insertError) {
-                            console.error('Error inserting merged period:', insertError);
-                        }
-                    } else {
-                        console.log('Creating new period');
-                        // Create new period
-                        const { error: insertError } = await supabase
-                            .from('open_dates')
-                            .insert({
-                                listing_id: listingId,
-                                start_date: startDate,
-                                end_date: endDate,
-                                created_at: new Date().toISOString()
-                            });
-
-                        if (insertError) {
-                            console.error('Error inserting new period:', insertError);
-                        }
-                    }
-                }
-
-                // Update calendar after processing all ranges
-                console.log('Fetching updated periods');
-                const { data: updatedPeriods, error: fetchError } = await supabase
-                    .from('open_dates')
-                    .select('*')
-                    .eq('listing_id', listingId);
-
-                if (fetchError) {
-                    console.error('Error fetching updated periods:', fetchError);
-                }
-
-                console.log('Updated periods:', updatedPeriods);
-                adminPicker.config.openPeriods = updatedPeriods || [];
-                
-                // Clear and redraw
-                adminPicker.clear();
-                adminPicker.redraw();
-                adminPicker.changeMonth(currentMonth, false);
-
-            } catch (error) {
-                console.error('Error in open dates handler:', error);
-            }
-        });
-
-        // Modify the close dates handler to match the open dates logic
-        document.querySelector("[data-element='close-dates']").addEventListener('click', async () => {
-            const currentMonth = adminPicker.currentMonth;
-            const selectedDates = adminPicker.selectedDates;
-            if (selectedDates.length === 0) return;
-
-            const dateRanges = createDateRanges(selectedDates);
-            console.log('Processing date ranges for closing:', dateRanges);
+            console.log('Processing rate ranges:', dateRanges);
 
             try {
                 for (const range of dateRanges) {
                     const startDate = formatDate(range.start);
                     const endDate = formatDate(range.end);
                     
-                    console.log('Closing dates from:', startDate, 'to:', endDate);
+                    console.log('Setting rate from:', startDate, 'to:', endDate);
                     
-                    // Find any open periods that overlap with our date range
-                    const { data: overlappingPeriods } = await supabase
-                        .from('open_dates')
+                    // Find any rates that overlap with our date range
+                    const { data: overlappingRates } = await supabase
+                        .from('rates')
                         .select('*')
                         .eq('listing_id', listingId)
                         .or(`end_date.gte.${startDate},start_date.lte.${endDate}`);
 
-                    console.log('Found overlapping periods:', overlappingPeriods);
+                    console.log('Found overlapping rates:', overlappingRates);
+
+                    let newStartDate = new Date(startDate);
+                    let newEndDate = new Date(endDate);
 
                     // Process each overlapping period
-                    for (const period of overlappingPeriods || []) {
+                    for (const period of overlappingRates || []) {
+                        // Skip if the period doesn't actually overlap
+                        if (!periodsOverlap(period.start_date, period.end_date, startDate, endDate)) {
+                            console.log('Skipping non-overlapping period:', period);
+                            continue;
+                        }
+
+                        // Delete the original period as we'll be creating new ones
+                        await supabase.from('rates').delete().eq('id', period.id);
+
+                        const periodStart = new Date(period.start_date);
+                        const periodEnd = new Date(period.end_date);
+
+                        // If the period has the same rate and is adjacent/overlapping, extend our range
+                        if (period.rate === rate) {
+                            newStartDate = new Date(Math.min(newStartDate, periodStart));
+                            newEndDate = new Date(Math.max(newEndDate, periodEnd));
+                            continue;
+                        }
+
+                        // Handle the period before our new range
+                        if (periodStart < newStartDate) {
+                            const beforeEndDate = new Date(newStartDate);
+                            beforeEndDate.setDate(beforeEndDate.getDate() - 1);
+                            
+                            await supabase
+                                .from('rates')
+                                .insert({
+                                    listing_id: listingId,
+                                    start_date: period.start_date,
+                                    end_date: formatDate(beforeEndDate),
+                                    rate: period.rate,
+                                    created_at: new Date().toISOString()
+                                });
+                        }
+
+                        // Handle the period after our new range
+                        if (periodEnd > newEndDate) {
+                            const afterStartDate = new Date(newEndDate);
+                            afterStartDate.setDate(afterStartDate.getDate() + 1);
+                            
+                            await supabase
+                                .from('rates')
+                                .insert({
+                                    listing_id: listingId,
+                                    start_date: formatDate(afterStartDate),
+                                    end_date: period.end_date,
+                                    rate: period.rate,
+                                    created_at: new Date().toISOString()
+                                });
+                        }
+                    }
+
+                    // Create the new merged rate period
+                    await supabase
+                        .from('rates')
+                        .insert({
+                            listing_id: listingId,
+                            start_date: formatDate(newStartDate),
+                            end_date: formatDate(newEndDate),
+                            rate: rate,
+                            created_at: new Date().toISOString()
+                        });
+                }
+
+                // Update calendar
+                const { data: updatedRates } = await supabase
+                    .from('rates')
+                    .select('*')
+                    .eq('listing_id', listingId);
+
+                console.log('Final updated rates:', updatedRates);
+                adminPicker.config.rates = updatedRates || [];
+                
+                // Clear and redraw
+                adminPicker.clear();
+                adminPicker.redraw();
+                adminPicker.changeMonth(currentMonth, false);
+
+                // Clear the rate input
+                rateInput.value = '';
+
+            } catch (error) {
+                console.error('Error in apply rate handler:', error);
+            }
+        });
+
+        // Reset rates button handler
+        document.querySelector("[data-element='reset-rates']").addEventListener('click', async () => {
+            const currentMonth = adminPicker.currentMonth;
+            const selectedDates = adminPicker.selectedDates;
+            if (selectedDates.length === 0) return;
+
+            const dateRanges = createDateRanges(selectedDates);
+            console.log('Processing ranges for rate reset:', dateRanges);
+
+            try {
+                for (const range of dateRanges) {
+                    const startDate = formatDate(range.start);
+                    const endDate = formatDate(range.end);
+                    
+                    console.log('Resetting rates from:', startDate, 'to:', endDate);
+                    
+                    // Find any rates that overlap with our date range
+                    const { data: overlappingRates } = await supabase
+                        .from('rates')
+                        .select('*')
+                        .eq('listing_id', listingId)
+                        .or(`end_date.gte.${startDate},start_date.lte.${endDate}`);
+
+                    console.log('Found overlapping rates:', overlappingRates);
+
+                    // Process each overlapping period
+                    for (const period of overlappingRates || []) {
                         // Skip if the period doesn't actually overlap
                         const periodStart = new Date(period.start_date);
                         const periodEnd = new Date(period.end_date);
@@ -834,35 +728,34 @@ document.addEventListener('DOMContentLoaded', async function() {
                         }
 
                         // Delete the original period
-                        await supabase
-                            .from('open_dates')
-                            .delete()
-                            .eq('id', period.id);
+                        await supabase.from('rates').delete().eq('id', period.id);
 
                         // If the period starts before our range, create a "before" period
                         if (periodStart < rangeStart) {
-                            const beforeEndDate = new Date(rangeStart);
+                            const beforeEndDate = new Date(startDate);
                             beforeEndDate.setDate(beforeEndDate.getDate() - 1);
                             await supabase
-                                .from('open_dates')
+                                .from('rates')
                                 .insert({
                                     listing_id: listingId,
                                     start_date: period.start_date,
                                     end_date: formatDate(beforeEndDate),
+                                    rate: period.rate,
                                     created_at: new Date().toISOString()
                                 });
                         }
 
                         // If the period ends after our range, create an "after" period
                         if (periodEnd > rangeEnd) {
-                            const afterStartDate = new Date(rangeEnd);
+                            const afterStartDate = new Date(endDate);
                             afterStartDate.setDate(afterStartDate.getDate() + 1);
                             await supabase
-                                .from('open_dates')
+                                .from('rates')
                                 .insert({
                                     listing_id: listingId,
                                     start_date: formatDate(afterStartDate),
                                     end_date: period.end_date,
+                                    rate: period.rate,
                                     created_at: new Date().toISOString()
                                 });
                         }
@@ -870,13 +763,13 @@ document.addEventListener('DOMContentLoaded', async function() {
                 }
 
                 // Update calendar
-                const { data: updatedPeriods } = await supabase
-                    .from('open_dates')
+                const { data: updatedRates } = await supabase
+                    .from('rates')
                     .select('*')
                     .eq('listing_id', listingId);
 
-                console.log('Final updated periods:', updatedPeriods);
-                adminPicker.config.openPeriods = updatedPeriods || [];
+                console.log('Final updated rates:', updatedRates);
+                adminPicker.config.rates = updatedRates || [];
                 
                 // Clear and redraw
                 adminPicker.clear();
@@ -884,83 +777,8 @@ document.addEventListener('DOMContentLoaded', async function() {
                 adminPicker.changeMonth(currentMonth, false);
 
             } catch (error) {
-                console.error('Error in close dates handler:', error);
+                console.error('Error in reset rates handler:', error);
             }
-        });
-
-        // Reset rates button handler
-        document.querySelector("[data-element='reset-rates']").addEventListener('click', async () => {
-            const currentMonth = adminPicker.currentMonth; // Store current month before operations
-            const [start, end] = adminPicker.selectedDates;
-            if (!start || !end) return;
-
-            // Format dates using local timezone
-            const startDate = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`;
-            const endDate = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
-
-            // Find any rates that overlap with our date range
-            const { data: existingRates, error: checkError } = await supabase
-                .from('rates')
-                .select('*')
-                .eq('listing_id', listingId)
-                .or(`end_date.gte.${startDate},start_date.lte.${endDate}`);
-
-            if (checkError) {
-                console.error('Error checking rates:', checkError);
-                return;
-            }
-
-            console.log('Existing rates to process:', existingRates);
-
-            // Process each overlapping rate period
-            for (const period of existingRates || []) {
-                // Delete the original period
-                await supabase.from('rates').delete().eq('id', period.id);
-
-                // Create before period if needed
-                if (new Date(period.start_date) < new Date(startDate)) {
-                    const beforeEndDate = new Date(startDate);
-                    beforeEndDate.setDate(beforeEndDate.getDate() - 1);
-                    const formattedBeforeEnd = beforeEndDate.toISOString().split('T')[0];
-                    
-                    await supabase.from('rates').insert({
-                        listing_id: listingId,
-                        start_date: period.start_date,
-                        end_date: formattedBeforeEnd,
-                        rate: period.rate,
-                        created_at: new Date().toISOString()
-                    });
-                }
-
-                // Create after period if needed
-                if (new Date(period.end_date) > new Date(endDate)) {
-                    const afterStartDate = new Date(endDate);
-                    afterStartDate.setDate(afterStartDate.getDate() + 1);
-                    const formattedAfterStart = afterStartDate.toISOString().split('T')[0];
-                    
-                    await supabase.from('rates').insert({
-                        listing_id: listingId,
-                        start_date: formattedAfterStart,
-                        end_date: period.end_date,
-                        rate: period.rate,
-                        created_at: new Date().toISOString()
-                    });
-                }
-            }
-
-            // Fetch updated rates
-            const { data: updatedRates } = await supabase
-                .from('rates')
-                .select('*')
-                .eq('listing_id', listingId);
-
-            // Update the calendar config
-            adminPicker.config.rates = updatedRates || [];
-            
-            // Clear first, then redraw and change to stored month
-            adminPicker.clear();
-            adminPicker.redraw();
-            adminPicker.changeMonth(currentMonth, false);
         });
 
         // Add this near your other event listeners
