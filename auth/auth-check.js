@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('User authenticated:', session.user.email);
         
         // If we're on the admin dashboard, populate user info
-        if (window.location.pathname.includes('admin-dashboard')) {
+        if (window.location.pathname.includes('admin')) {
             await populateUserInfo();
         }
     };
