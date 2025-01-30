@@ -806,77 +806,76 @@ document.addEventListener('DOMContentLoaded', async function() {
 
             try {
                 for (const range of dateRanges) {
-                    const startDate = `${range.start.getFullYear()}-${String(range.start.getMonth() + 1).padStart(2, '0')}-${String(range.start.getDate()).padStart(2, '0')}`;
-                    const endDate = `${range.end.getFullYear()}-${String(range.end.getMonth() + 1).padStart(2, '0')}-${String(range.end.getDate()).padStart(2, '0')}`;
-
+                    const startDate = formatDate(range.start);
+                    const endDate = formatDate(range.end);
+                    
                     console.log('Closing dates from:', startDate, 'to:', endDate);
-
+                    
                     // Find any open periods that overlap with our date range
-                    const { data: overlappingPeriods, error: checkError } = await supabase
+                    const { data: overlappingPeriods } = await supabase
                         .from('open_dates')
                         .select('*')
                         .eq('listing_id', listingId)
                         .or(`end_date.gte.${startDate},start_date.lte.${endDate}`);
 
-                    if (checkError) {
-                        console.error('Error checking overlapping periods:', checkError);
-                        continue;
-                    }
-
                     console.log('Found overlapping periods:', overlappingPeriods);
 
                     // Process each overlapping period
                     for (const period of overlappingPeriods || []) {
+                        // Skip if the period doesn't actually overlap
                         const periodStart = new Date(period.start_date);
                         const periodEnd = new Date(period.end_date);
                         const rangeStart = new Date(startDate);
                         const rangeEnd = new Date(endDate);
 
-                        // Delete the original period
-                        await supabase.from('open_dates').delete().eq('id', period.id);
+                        if (periodEnd < rangeStart || periodStart > rangeEnd) {
+                            console.log('Skipping non-overlapping period:', period);
+                            continue;
+                        }
 
-                        // Create before period if needed
+                        // Delete the original period
+                        await supabase
+                            .from('open_dates')
+                            .delete()
+                            .eq('id', period.id);
+
+                        // If the period starts before our range, create a "before" period
                         if (periodStart < rangeStart) {
                             const beforeEndDate = new Date(rangeStart);
                             beforeEndDate.setDate(beforeEndDate.getDate() - 1);
-                            const formattedBeforeEnd = beforeEndDate.toISOString().split('T')[0];
-                            
-                            await supabase.from('open_dates').insert({
-                                listing_id: listingId,
-                                start_date: period.start_date,
-                                end_date: formattedBeforeEnd,
-                                created_at: new Date().toISOString()
-                            });
+                            await supabase
+                                .from('open_dates')
+                                .insert({
+                                    listing_id: listingId,
+                                    start_date: period.start_date,
+                                    end_date: formatDate(beforeEndDate),
+                                    created_at: new Date().toISOString()
+                                });
                         }
 
-                        // Create after period if needed
+                        // If the period ends after our range, create an "after" period
                         if (periodEnd > rangeEnd) {
                             const afterStartDate = new Date(rangeEnd);
                             afterStartDate.setDate(afterStartDate.getDate() + 1);
-                            const formattedAfterStart = afterStartDate.toISOString().split('T')[0];
-                            
-                            await supabase.from('open_dates').insert({
-                                listing_id: listingId,
-                                start_date: formattedAfterStart,
-                                end_date: period.end_date,
-                                created_at: new Date().toISOString()
-                            });
+                            await supabase
+                                .from('open_dates')
+                                .insert({
+                                    listing_id: listingId,
+                                    start_date: formatDate(afterStartDate),
+                                    end_date: period.end_date,
+                                    created_at: new Date().toISOString()
+                                });
                         }
                     }
                 }
 
-                // Update calendar after processing all ranges
-                console.log('Fetching updated periods');
-                const { data: updatedPeriods, error: fetchError } = await supabase
+                // Update calendar
+                const { data: updatedPeriods } = await supabase
                     .from('open_dates')
                     .select('*')
                     .eq('listing_id', listingId);
 
-                if (fetchError) {
-                    console.error('Error fetching updated periods:', fetchError);
-                }
-
-                console.log('Updated periods:', updatedPeriods);
+                console.log('Final updated periods:', updatedPeriods);
                 adminPicker.config.openPeriods = updatedPeriods || [];
                 
                 // Clear and redraw
