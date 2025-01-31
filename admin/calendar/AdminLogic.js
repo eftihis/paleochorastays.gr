@@ -1309,8 +1309,8 @@ document.addEventListener('DOMContentLoaded', async function() {
                 const modalElements = {
                     'guest-name': bookings.guests.name,
                     'listing-name': bookings.listings.name,
-                    'check-in': formatDate(bookings.check_in),
-                    'check-out': formatDate(bookings.check_out),
+                    'check-in': bookings.check_in, // No need to format, already in YYYY-MM-DD
+                    'check-out': bookings.check_out, // No need to format, already in YYYY-MM-DD
                     'total-nights': `${nights} nights`,
                     'total-price': `€${formatPrice(totalPrice)}`,
                     'confirmation-code': bookings.id || 'N/A',
@@ -1399,7 +1399,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             console.log('Modal element:', modal);
             
             if (!modal) {
-                console.error('Modal element not found! Please check if the HTML contains an element with data-element="booking-modal"');
+                console.error('Modal element not found!');
                 return;
             }
 
@@ -1407,8 +1407,8 @@ document.addEventListener('DOMContentLoaded', async function() {
             const modalElements = {
                 'guest-name': bookings.guests.name,
                 'listing-name': bookings.listings.name,
-                'check-in': formatDate(bookings.check_in),
-                'check-out': formatDate(bookings.check_out),
+                'check-in': bookings.check_in, // No need to format, already in YYYY-MM-DD
+                'check-out': bookings.check_out, // No need to format, already in YYYY-MM-DD
                 'total-nights': `${nights} nights`,
                 'total-price': `€${formatPrice(totalPrice)}`,
                 'confirmation-code': bookings.id || 'N/A',
@@ -1421,7 +1421,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 'payment-status': bookings.payment_status || 'N/A'
             };
 
-            // Debug each modal element
+            // Update each modal element
             Object.entries(modalElements).forEach(([element, value]) => {
                 const el = document.querySelector(`[data-element="booking-${element}"]`);
                 if (el) {
@@ -1434,12 +1434,8 @@ document.addEventListener('DOMContentLoaded', async function() {
 
             // Show the modal
             console.log('Attempting to show modal...');
-            modal.style.display = 'block'; // Add explicit display
+            modal.style.display = 'block';
             modal.classList.add('is-visible');
-            console.log('Modal classes after adding is-visible:', modal.classList.toString());
-            console.log('Modal display style:', modal.style.display);
-            console.log('Modal visibility:', window.getComputedStyle(modal).visibility);
-            console.log('Modal opacity:', window.getComputedStyle(modal).opacity);
 
         } catch (err) {
             console.error('Error processing booking:', err);
